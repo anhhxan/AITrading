@@ -159,27 +159,39 @@ export default function RobotWizard() {
           {step === 5 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
               <div className="space-y-4">
-                <Label className="text-lg">Rủi ro (Risk %)</Label>
+                <Label className="text-lg">Quản trị Vốn (Risk Allocation)</Label>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-xs">Vốn mỗi lệnh (%)</Label>
-                    <Input type="number" defaultValue={10} />
+                    <Label className="text-xs">Loại Risk</Label>
+                    <Select defaultValue="risk_percent">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn loại Risk" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="risk_percent">Risk % (Theo Balance)</SelectItem>
+                        <SelectItem value="fixed_usdt">Fixed USDT (Tiền cố định)</SelectItem>
+                        <SelectItem value="lot">Fixed Lot</SelectItem>
+                        <SelectItem value="kelly">Kelly Criterion</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs">Đòn bẩy (Leverage)</Label>
-                    <Input type="number" defaultValue={10} />
+                    <Label className="text-xs">Giá trị Risk</Label>
+                    <Input type="number" defaultValue={2} />
                   </div>
                 </div>
               </div>
               <div className="space-y-4 border-t pt-4">
-                <Label className="text-lg">Chốt lời & Cắt lỗ (Exit)</Label>
-                <Select defaultValue="atr">
+                <Label className="text-lg">Chiến lược Thoát lệnh (Exit Strategy)</Label>
+                <Select defaultValue="strategy">
                   <SelectTrigger>
                     <SelectValue placeholder="Phương pháp Exit" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="strategy">Theo Indicator/Strategy (Khuyên dùng)</SelectItem>
                     <SelectItem value="atr">ATR Trailing Stop</SelectItem>
-                    <SelectItem value="fixed">Fixed %</SelectItem>
+                    <SelectItem value="fixed">Fixed TP/SL Ratio</SelectItem>
+                    <SelectItem value="partial">Partial Take Profit (Chốt lời từng phần)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -188,26 +200,33 @@ export default function RobotWizard() {
 
           {step === 6 && (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4 bg-muted/30 p-4 rounded-lg">
-              <div className="grid grid-cols-2 gap-y-2 text-sm">
+              <h3 className="font-bold border-b pb-2 mb-2">Trading Summary</h3>
+              <div className="grid grid-cols-2 gap-y-3 text-sm">
                 <div className="text-muted-foreground">Tên Robot:</div>
-                <div className="font-medium">BTC Swing H3</div>
+                <div className="font-medium text-foreground">BTC Swing H3</div>
                 
-                <div className="text-muted-foreground">Provider:</div>
-                <div className="font-medium">Paper Trading</div>
+                <div className="text-muted-foreground">Provider / Env:</div>
+                <div className="font-medium">Paper Trading (Demo Acc 1)</div>
                 
-                <div className="text-muted-foreground">Tài sản:</div>
-                <div className="font-medium">BTCUSDT (3H)</div>
+                <div className="text-muted-foreground">Tài sản / Khung giờ:</div>
+                <div className="font-medium">BTCUSDT • 3H</div>
                 
-                <div className="text-muted-foreground">Chiến lược:</div>
-                <div className="font-medium">BB_Strategy + BB_MB</div>
+                <div className="text-muted-foreground">Chiến lược lõi:</div>
+                <div className="font-medium text-blue-600">BB_Strategy + BB_MB</div>
                 
-                <div className="text-muted-foreground">Rủi ro:</div>
-                <div className="font-medium">10% Vốn (x10)</div>
+                <div className="text-muted-foreground">Tham số:</div>
+                <div className="font-medium">Length = 20, Mult = 2</div>
+                
+                <div className="text-muted-foreground">Risk Allocation:</div>
+                <div className="font-medium text-red-500">Risk 2% Balance</div>
+                
+                <div className="text-muted-foreground">Exit Strategy:</div>
+                <div className="font-medium">Thoát theo Strategy Limit</div>
               </div>
-              <div className="mt-6 p-4 border border-green-500/30 bg-green-500/10 rounded flex items-start gap-3">
-                <Rocket className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
-                <p className="text-sm text-green-800 dark:text-green-300">
-                  Mọi thứ đã sẵn sàng. Robot sẽ được khởi tạo trong trạng thái <strong>CREATED</strong>. Bạn có thể kiểm tra kỹ cấu hình tại trang Robot Detail trước khi nhấn Start.
+              <div className="mt-4 p-3 border border-blue-500/30 bg-blue-500/5 rounded flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-blue-800 dark:text-blue-300">
+                  TradingView chỉ dùng để <strong>tham chiếu cấu hình</strong>. Toàn bộ tín hiệu sẽ do Core Engine (BB_MB) tính toán sau khi khởi tạo.
                 </p>
               </div>
             </div>
