@@ -76,16 +76,17 @@ export class RobotStateMachine {
   }
 
   private evaluateRetracement(candleData: any, indicatorSnapshot: any): void {
-    // Increment timeout counter
-    this.currentTimeoutCount++;
-    
-    if (this.currentTimeoutCount > this.maxTimeoutCandles) {
-      EventBus.publish(TradingEvent.ENTRY_TIMEOUT, { robotId: this.id, reason: 'TIMEOUT' });
-      this.transitionTo(RobotState.WAIT_SIGNAL);
-      return;
+    // If timeout is 0, we never timeout
+    if (this.maxTimeoutCandles > 0) {
+      this.currentTimeoutCount++;
+      if (this.currentTimeoutCount > this.maxTimeoutCandles) {
+        EventBus.publish(TradingEvent.ENTRY_TIMEOUT, { robotId: this.id, reason: 'TIMEOUT' });
+        this.transitionTo(RobotState.WAIT_SIGNAL);
+        return;
+      }
     }
     
-    // Check if price is within retracement zone (mock logic)
+    // Check if price is within retracement zone
     const inZone = this.checkRetracementZone(candleData.close, indicatorSnapshot);
     if (inZone) {
       this.transitionTo(RobotState.READY_TO_ENTER);
