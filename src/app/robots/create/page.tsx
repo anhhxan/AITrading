@@ -72,14 +72,12 @@ export default function RobotWizard() {
           )}
           
           {step === 2 && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Market Data Provider</Label>
                   <Select defaultValue="binance_futures">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Nguồn cấp dữ liệu" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Nguồn cấp dữ liệu" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="binance_futures">Binance Futures Data</SelectItem>
                       <SelectItem value="binance_spot">Binance Spot Data</SelectItem>
@@ -90,9 +88,7 @@ export default function RobotWizard() {
                 <div className="space-y-2">
                   <Label>Execution Provider</Label>
                   <Select defaultValue="paper">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sàn giao dịch/Khớp lệnh" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Sàn giao dịch/Khớp lệnh" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="paper">Paper Trading Engine</SelectItem>
                       <SelectItem value="binance_testnet">Binance Testnet</SelectItem>
@@ -101,6 +97,19 @@ export default function RobotWizard() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-2 border-t pt-4">
+                <Label>Trading Session (Lịch giao dịch)</Label>
+                <Select defaultValue="247">
+                  <SelectTrigger><SelectValue placeholder="Chọn Session" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="247">24/7 (Crypto - BTC/ETH)</SelectItem>
+                    <SelectItem value="london">London Session (Vàng/Forex)</SelectItem>
+                    <SelectItem value="london_ny">London + New York (Forex)</SelectItem>
+                    <SelectItem value="custom">Custom Schedule</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           )}
@@ -169,37 +178,53 @@ export default function RobotWizard() {
                   <div className="space-y-2">
                     <Label className="text-xs">Loại Risk</Label>
                     <Select defaultValue="risk_percent">
-                      <SelectTrigger>
-                        <SelectValue placeholder="Chọn loại Risk" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder="Chọn loại Risk" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="risk_percent">Risk % (Theo Balance)</SelectItem>
                         <SelectItem value="fixed_usdt">Fixed USDT (Tiền cố định)</SelectItem>
                         <SelectItem value="lot">Fixed Lot</SelectItem>
-                        <SelectItem value="kelly">Kelly Criterion</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs">Giá trị Risk</Label>
+                    <Label className="text-xs">Giá trị Risk (%)</Label>
                     <Input type="number" defaultValue={2} />
                   </div>
                 </div>
               </div>
+              
               <div className="space-y-4 border-t pt-4">
                 <Label className="text-lg">Chiến lược Thoát lệnh (Exit Strategy)</Label>
                 <Select defaultValue="strategy">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Phương pháp Exit" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Phương pháp Exit" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="strategy">Theo Indicator/Strategy (Khuyên dùng)</SelectItem>
                     <SelectItem value="atr">ATR Trailing Stop</SelectItem>
                     <SelectItem value="fixed">Fixed TP/SL Ratio</SelectItem>
-                    <SelectItem value="partial">Partial Take Profit (Chốt lời từng phần)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* MỚI: Risk Preview */}
+              <div className="mt-4 p-4 bg-muted/50 border rounded-lg space-y-2 text-sm">
+                <Label className="font-bold flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-4 h-4 text-orange-500" />
+                  Risk Calculation Preview (Simulated)
+                </Label>
+                <div className="grid grid-cols-2 gap-y-2 font-mono">
+                  <div><span className="text-muted-foreground">Balance:</span> 1,000 USDT</div>
+                  <div><span className="text-muted-foreground">Risk Target:</span> 20 USDT (2%)</div>
+                  <div><span className="text-muted-foreground">Leverage:</span> x10</div>
+                  <div><span className="text-muted-foreground">Entry Price:</span> 118,000</div>
+                  <div><span className="text-muted-foreground">SL Trigger:</span> 117,000</div>
+                  <div><span className="text-muted-foreground">TP Trigger:</span> 121,000</div>
+                  <div className="col-span-2 border-t my-1"></div>
+                  <div className="text-blue-600 font-bold"><span className="text-muted-foreground">Position Size:</span> 0.020 BTC</div>
+                  <div className="text-orange-600 font-bold"><span className="text-muted-foreground">Margin Used:</span> ~236 USDT</div>
+                  <div className="text-red-600 col-span-2"><span className="text-muted-foreground">Est. Liquidation:</span> ~107,380</div>
+                </div>
+              </div>
+
             </div>
           )}
 
