@@ -1,102 +1,123 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Activity, Bot, DollarSign, Signal } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Activity, CirclePlay, TrendingUp, Zap, ServerCrash, PauseCircle, Clock } from "lucide-react"
 
-export default function Dashboard() {
+export default function DashboardOverview() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 p-4 md:p-8 w-full max-w-6xl mx-auto">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Tổng quan hệ thống</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         <p className="text-muted-foreground mt-2">
-          Theo dõi hiệu suất và trạng thái của các Trading Robot (Digital Employees).
+          Tổng quan trạng thái hoạt động của hệ thống AI Trading.
         </p>
       </div>
-      
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tổng PnL</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">+$1,520.00</div>
-            <p className="text-xs text-muted-foreground">+20.1% so với tháng trước</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Robots</CardTitle>
-            <Bot className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">4 / 12</div>
-            <p className="text-xs text-muted-foreground">Đang chạy Live</p>
-          </CardContent>
-        </Card>
 
+      {/* Thống kê chung */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Robot Running</CardTitle>
+            <CirclePlay className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">82%</div>
-            <p className="text-xs text-muted-foreground">Trung bình toàn hệ thống</p>
+            <div className="text-2xl font-bold">5</div>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tín hiệu đang chờ</CardTitle>
-            <Signal className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Paper Position</CardTitle>
+            <Activity className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">2</div>
-            <p className="text-xs text-muted-foreground">WAIT_RETRACEMENT</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Today's PnL</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-500">+125 USDT</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Today's Signals</CardTitle>
+            <Zap className="h-4 w-4 text-yellow-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">14</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">System Health</CardTitle>
+            <ServerCrash className="h-4 w-4 text-muted-foreground hidden" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+              </span>
+              <span className="text-green-500 text-lg">Healthy</span>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Biểu đồ lợi nhuận (PnL)</CardTitle>
-          </CardHeader>
-          <CardContent className="pl-2">
-            <div className="h-[300px] w-full flex items-center justify-center border-dashed border-2 border-slate-200 rounded-md bg-slate-50 text-slate-400">
-              [Chart Component Placeholder]
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Sự kiện gần đây</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-8">
-              <div className="flex items-center">
-                <div className="ml-4 space-y-1">
+      {/* Danh sách Robot hoạt động */}
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Trading Robots</CardTitle>
+          <CardDescription>Danh sách trạng thái các Robot hiện tại.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            
+            <div className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
+              <div className="flex items-center gap-4">
+                <CirclePlay className="h-5 w-5 text-green-500" />
+                <div>
                   <p className="text-sm font-medium leading-none">BTC Swing H3</p>
-                  <p className="text-sm text-muted-foreground">
-                    Transition: WAIT_SIGNAL → SIGNAL_DETECTED
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">Binance Paper (BTCUSDT)</p>
                 </div>
-                <div className="ml-auto font-medium text-xs text-slate-500">2 phút trước</div>
               </div>
-              <div className="flex items-center">
-                <div className="ml-4 space-y-1">
-                  <p className="text-sm font-medium leading-none">Gold Scalper</p>
-                  <p className="text-sm text-muted-foreground">
-                    Đóng lệnh MUA tại 2420.5 (TP)
-                  </p>
-                </div>
-                <div className="ml-auto font-medium text-green-600 text-xs">+$42.50</div>
-              </div>
+              <Badge variant="outline" className="text-green-500 border-green-500/20 bg-green-500/10">
+                🟢 Running
+              </Badge>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+
+            <div className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
+              <div className="flex items-center gap-4">
+                <PauseCircle className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium leading-none">Gold Trend</p>
+                  <p className="text-sm text-muted-foreground mt-1">MT5 Paper (XAUUSD)</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-muted-foreground">
+                ⚪ Stopped
+              </Badge>
+            </div>
+
+            <div className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
+              <div className="flex items-center gap-4">
+                <Clock className="h-5 w-5 text-yellow-500" />
+                <div>
+                  <p className="text-sm font-medium leading-none">BTC Test</p>
+                  <p className="text-sm text-muted-foreground mt-1">Binance Testnet (BTCUSDT)</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-yellow-600 border-yellow-500/20 bg-yellow-500/10">
+                🟡 Waiting Signal
+              </Badge>
+            </div>
+
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
