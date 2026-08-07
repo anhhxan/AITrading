@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Play, Square, Pause, Copy, Archive, Lock, Beaker, CheckCircle2, XCircle, AlertTriangle, ArrowRight, Download } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Play, Square, Pause, Copy, Archive, Lock, Beaker, CheckCircle2, XCircle, AlertTriangle, ArrowRight, Download, Activity } from "lucide-react"
 import TradingViewWidget from "@/components/robots/TradingViewWidget"
 
 export default function RobotDetail() {
@@ -15,7 +16,7 @@ export default function RobotDetail() {
   const isLocked = robotState !== "CREATED" && robotState !== "STOPPED"
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-8 w-full max-w-[1500px] mx-auto">
+    <div className="flex flex-col gap-6 p-4 md:p-8 w-full max-w-[1600px] mx-auto">
       
       {/* 1. ROBOT HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 border rounded-xl bg-card shadow-sm">
@@ -27,13 +28,13 @@ export default function RobotDetail() {
             </Badge>
           </div>
           <div className="flex items-center gap-3 text-sm text-muted-foreground font-medium">
-            <span>Version 1.0.0</span>
+            <span className="text-foreground">Version 1.0.0</span>
             <span>•</span>
             <span className="flex items-center gap-1"><Badge variant="secondary">BB+MB</Badge></span>
             <span>•</span>
-            <span>BTCUSDT</span>
+            <span className="text-foreground">BTCUSDT</span>
             <span>•</span>
-            <span>3H</span>
+            <span className="text-foreground">3H</span>
             <span>•</span>
             <span>Paper Trading</span>
           </div>
@@ -54,10 +55,32 @@ export default function RobotDetail() {
               <Play className="w-4 h-4 mr-2" /> Start
             </Button>
           )}
+          
           <div className="w-px h-6 bg-border mx-2"></div>
-          <Button variant="outline" size="sm" title="Test Robot Simulation" className="border-purple-500 text-purple-600 bg-purple-50 hover:bg-purple-100">
-            <Beaker className="w-4 h-4 mr-2" /> Test Robot
-          </Button>
+          
+          <div className="flex items-center gap-1 bg-purple-500/10 border border-purple-500/20 p-1 rounded-md">
+            <Select defaultValue="100">
+              <SelectTrigger className="h-8 w-[90px] border-none bg-transparent text-purple-700 font-medium">
+                <SelectValue placeholder="Candles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="100">100 Candles</SelectItem>
+                <SelectItem value="500">500 Candles</SelectItem>
+                <SelectItem value="1000">1000 Candles</SelectItem>
+                <SelectItem value="5000">5000 Candles</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" size="sm" className="h-8 text-purple-700 hover:bg-purple-500/20 hover:text-purple-800 px-2" title="Chạy mô phỏng logic">
+              <Beaker className="w-4 h-4 mr-1" /> Test Robot
+            </Button>
+            <div className="w-px h-4 bg-purple-500/20 mx-1"></div>
+            <Button variant="ghost" size="sm" className="h-8 text-purple-700 hover:bg-purple-500/20 px-2" title="Xuất kết quả mô phỏng (CSV/JSON/TradingView)">
+              <Download className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <div className="w-px h-6 bg-border mx-2"></div>
+          
           <Button variant="outline" size="sm" title="Clone">
             <Copy className="w-4 h-4" />
           </Button>
@@ -83,7 +106,7 @@ export default function RobotDetail() {
           <TabsTrigger value="tv">TradingView</TabsTrigger>
         </TabsList>
 
-        {/* TAB: DECISION PANEL (MỚI) */}
+        {/* TAB: DECISION PANEL (UPDATE) */}
         <TabsContent value="decision" className="animate-in fade-in">
           <Card className="border-blue-500/20 shadow-md">
             <CardHeader className="bg-blue-500/5 pb-4 border-b">
@@ -91,71 +114,124 @@ export default function RobotDetail() {
                 Bộ não quyết định (Decision Panel)
               </CardTitle>
               <CardDescription>
-                Theo dõi chính xác cách Robot suy luận ở thời điểm hiện tại (Realtime).
+                Theo dõi chính xác cách Robot phân tích thị trường ở thời điểm hiện tại (Realtime).
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+              
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 
-                <div className="p-4 border rounded-lg text-center bg-card">
-                  <p className="text-xs text-muted-foreground uppercase mb-2 font-semibold">Indicator</p>
-                  <div className="flex flex-col items-center gap-1">
-                    <CheckCircle2 className="w-8 h-8 text-green-500" />
-                    <span className="font-medium">Passed</span>
+                {/* Khối Data */}
+                <div className="lg:col-span-1 p-4 border rounded-lg bg-card space-y-3">
+                  <h4 className="font-bold text-sm border-b pb-2">Market Data Snapshot</h4>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Current Price</span>
+                    <span className="font-bold text-green-600">118,250</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Band 1 (Outer)</span>
+                    <span className="font-mono">119,500</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Band 2 (Inner)</span>
+                    <span className="font-mono">119,100</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Band 3 (SMA)</span>
+                    <span className="font-mono text-blue-600">118,640</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Band 4 (Inner)</span>
+                    <span className="font-mono font-bold">118,180</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Band 5 (Outer)</span>
+                    <span className="font-mono">117,900</span>
                   </div>
                 </div>
 
-                <div className="p-4 border rounded-lg text-center bg-card">
-                  <p className="text-xs text-muted-foreground uppercase mb-2 font-semibold">Trend</p>
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-8 h-8 rounded bg-green-500/10 text-green-500 flex items-center justify-center font-bold text-xl">↑</div>
-                    <span className="font-medium text-green-500">Bullish</span>
+                {/* Khối Logic */}
+                <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  
+                  <div className="p-4 border rounded-lg text-center bg-card">
+                    <p className="text-xs text-muted-foreground uppercase mb-2 font-semibold">Breakout Signal</p>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="text-sm font-mono mb-1">Dist: +70</div>
+                      <Badge className="bg-green-500 hover:bg-green-600">LONG SIGNAL</Badge>
+                    </div>
                   </div>
-                </div>
 
-                <div className="p-4 border rounded-lg text-center bg-card">
-                  <p className="text-xs text-muted-foreground uppercase mb-2 font-semibold">Retracement</p>
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-8 h-8 rounded bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold">18%</div>
-                    <span className="font-medium text-blue-500">Target &lt; 20%</span>
+                  <div className="p-4 border rounded-lg text-center bg-card">
+                    <p className="text-xs text-muted-foreground uppercase mb-2 font-semibold">Retracement</p>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="text-sm font-mono mb-1">Zone: 56 | In: YES</div>
+                      <Badge variant="outline" className="border-blue-500 text-blue-500">READY</Badge>
+                    </div>
                   </div>
-                </div>
 
-                <div className="p-4 border rounded-lg text-center bg-card">
-                  <p className="text-xs text-muted-foreground uppercase mb-2 font-semibold">Risk / Margin</p>
-                  <div className="flex flex-col items-center gap-1">
-                    <CheckCircle2 className="w-8 h-8 text-green-500" />
-                    <span className="font-medium">Passed</span>
+                  <div className="p-4 border rounded-lg text-center bg-card">
+                    <p className="text-xs text-muted-foreground uppercase mb-2 font-semibold">Risk & Margin</p>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="text-sm font-mono mb-1">Timeout: 2/3</div>
+                      <Badge variant="outline" className="border-green-500 text-green-500">PASS</Badge>
+                    </div>
                   </div>
-                </div>
 
-                <div className="p-4 border rounded-lg text-center bg-card">
-                  <p className="text-xs text-muted-foreground uppercase mb-2 font-semibold">Current Position</p>
-                  <div className="flex flex-col items-center gap-1">
-                    <div className="w-8 h-8 rounded bg-muted text-muted-foreground flex items-center justify-center">0</div>
-                    <span className="font-medium">None</span>
+                  <div className="p-4 border-2 border-green-500 rounded-lg text-center bg-green-500/10 relative overflow-hidden flex flex-col justify-center items-center">
+                    <div className="absolute inset-0 bg-green-500/10 animate-pulse"></div>
+                    <p className="text-xs text-green-700 uppercase mb-2 font-bold relative z-10">Final Decision</p>
+                    <span className="font-bold text-xl text-green-600 relative z-10">READY_TO_BUY</span>
                   </div>
-                </div>
 
-                <div className="p-4 border-2 border-green-500 rounded-lg text-center bg-green-500/10 relative overflow-hidden flex flex-col justify-center items-center">
-                  <div className="absolute inset-0 bg-green-500/10 animate-pulse"></div>
-                  <p className="text-xs text-green-700 uppercase mb-2 font-bold relative z-10">Final Decision</p>
-                  <span className="font-bold text-xl text-green-600 relative z-10">🟢 READY TO BUY</span>
                 </div>
 
               </div>
+
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* TAB: INDICATOR */}
-        <TabsContent value="indicator" className="animate-in fade-in">
+        <TabsContent value="indicator" className="animate-in fade-in space-y-6">
+          
+          <Card className="border-indigo-500/20 shadow-sm">
+            <CardHeader className="bg-indigo-500/5 pb-4 border-b">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-indigo-500" />
+                Indicator Verification Panel
+              </CardTitle>
+              <CardDescription>Xác thực tính tương thích của Plugin với mã nguồn Pine Script gốc.</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase mb-1">Plugin Name</p>
+                <p className="font-semibold text-foreground">BB_MB</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase mb-1">Pine Version</p>
+                <p className="font-semibold text-foreground">v4 Standard</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase mb-1">Basis Method</p>
+                <Badge variant="outline" className="border-indigo-500 text-indigo-600">SMA (Simple Moving Average)</Badge>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase mb-1">Source Price</p>
+                <p className="font-semibold text-foreground">Close</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase mb-1">Compatibility Status</p>
+                <Badge className="bg-green-500">✅ 100% Bit-by-bit Compatible</Badge>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Indicator: BB_MB</CardTitle>
-                  <CardDescription>Tham số tính toán Bollinger Bands và EMA.</CardDescription>
+                  <CardTitle>Cấu hình Indicator: BB_MB</CardTitle>
+                  <CardDescription>Tham số tính toán dải Bollinger Bands.</CardDescription>
                 </div>
                 {isLocked && (
                   <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/20 px-3 py-1">
@@ -177,44 +253,6 @@ export default function RobotDetail() {
                 <div className="space-y-2">
                   <Label>Mult2 (Độ lệch chuẩn vòng ngoài)</Label>
                   <Input type="number" step="0.1" defaultValue={2.0} disabled={isLocked} />
-                </div>
-              </div>
-              
-              <div className="pt-6 border-t">
-                <h4 className="text-sm font-semibold mb-4">Live Preview (Mock Data)</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 text-sm text-center">
-                  <div className="p-3 bg-muted rounded-md border border-t-4 border-t-red-500">
-                    <div className="text-muted-foreground text-[10px] uppercase">Band 1</div>
-                    <div className="font-bold">65,200</div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md border border-t-4 border-t-orange-500">
-                    <div className="text-muted-foreground text-[10px] uppercase">Band 2</div>
-                    <div className="font-bold">64,100</div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md border border-t-4 border-t-transparent">
-                    <div className="text-muted-foreground text-[10px] uppercase">Band 3</div>
-                    <div className="font-bold">63,500</div>
-                  </div>
-                  <div className="p-3 bg-blue-500/10 rounded-md border border-blue-500/50">
-                    <div className="text-blue-600 font-semibold text-[10px] uppercase">EMA (Basis)</div>
-                    <div className="font-bold text-blue-700">63,000</div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md border border-b-4 border-b-transparent">
-                    <div className="text-muted-foreground text-[10px] uppercase">Current Price</div>
-                    <div className="font-bold text-green-600">62,800</div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md border border-b-4 border-b-green-500">
-                    <div className="text-muted-foreground text-[10px] uppercase">Band 4</div>
-                    <div className="font-bold">61,900</div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md border border-b-4 border-b-teal-500">
-                    <div className="text-muted-foreground text-[10px] uppercase">Band 5</div>
-                    <div className="font-bold">60,800</div>
-                  </div>
-                  <div className="p-3 bg-muted rounded-md border border-dashed flex flex-col justify-center">
-                    <div className="text-muted-foreground text-[10px] uppercase">Dist. to Band 4</div>
-                    <div className="font-bold">900</div>
-                  </div>
                 </div>
               </div>
             </CardContent>
@@ -240,8 +278,8 @@ export default function RobotDetail() {
                         <span className="text-xs text-muted-foreground">17:00 PM</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-sm mt-2">
-                        <div className="text-muted-foreground">Price: <span className="font-medium text-foreground">61,200</span></div>
-                        <div className="text-muted-foreground">Reason: <span className="font-medium text-foreground">Breakout Band 4</span></div>
+                        <div className="text-muted-foreground">Price: <span className="font-medium text-foreground">118,250</span></div>
+                        <div className="text-muted-foreground">Reason: <span className="font-medium text-foreground">Breakout Band 4 (118,180)</span></div>
                       </div>
                     </div>
                   </div>
@@ -258,8 +296,8 @@ export default function RobotDetail() {
                         <span className="text-xs text-muted-foreground">17:45 PM (Current)</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-sm mt-2">
-                        <div className="text-muted-foreground">Retracement: <span className="font-medium text-foreground">18%</span></div>
-                        <div className="text-muted-foreground">Action: <span className="font-medium text-foreground">Waiting execution</span></div>
+                        <div className="text-muted-foreground">Price: <span className="font-medium text-foreground">118,020</span></div>
+                        <div className="text-muted-foreground">Retracement: <span className="font-medium text-foreground">Inside 20% Zone</span></div>
                       </div>
                     </div>
                   </div>
@@ -270,7 +308,7 @@ export default function RobotDetail() {
           </Card>
         </TabsContent>
 
-        {/* TAB: DIAGNOSTICS (Gộp Logs, Events, Snapshots, Health) */}
+        {/* TAB: DIAGNOSTICS */}
         <TabsContent value="diagnostics" className="animate-in fade-in">
           <Card>
             <CardHeader>
@@ -290,17 +328,17 @@ export default function RobotDetail() {
                   <div className="p-4 space-y-2">
                     <div className="flex items-center justify-between text-sm p-2 bg-muted rounded">
                       <span className="font-mono text-xs w-24">17:45:10</span>
-                      <Badge variant="outline" className="w-24 text-center">STATE_CHANGE</Badge>
+                      <Badge variant="outline" className="w-24 text-center border-blue-500 text-blue-600">STATE</Badge>
                       <span className="flex-1 px-4">State transitioned to READY_TO_ENTER</span>
                     </div>
                     <div className="flex items-center justify-between text-sm p-2 border-b">
                       <span className="font-mono text-xs w-24">17:00:00</span>
-                      <Badge variant="outline" className="w-24 text-center text-yellow-600">SIGNAL</Badge>
-                      <span className="flex-1 px-4 text-yellow-600">LONG SIGNAL detected at price 61200</span>
+                      <Badge variant="outline" className="w-24 text-center text-yellow-600 border-yellow-500">SIGNAL</Badge>
+                      <span className="flex-1 px-4 text-yellow-600">LONG SIGNAL detected at price 118250</span>
                     </div>
                     <div className="flex items-center justify-between text-sm p-2 border-b">
                       <span className="font-mono text-xs w-24">16:15:00</span>
-                      <Badge variant="outline" className="w-24 text-center text-red-600">ERROR</Badge>
+                      <Badge variant="outline" className="w-24 text-center text-red-600 border-red-500">ERROR</Badge>
                       <span className="flex-1 px-4 text-red-600">Binance API Rate Limit</span>
                     </div>
                   </div>
@@ -309,28 +347,41 @@ export default function RobotDetail() {
                 <TabsContent value="snapshots" className="border rounded-md p-8 text-center text-muted-foreground">
                    Click vào một Trade History ở tab Position để xem cấu hình Risk, State và Indicator tại thời điểm vào lệnh.
                 </TabsContent>
+
               </Tabs>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* TAB: TRADINGVIEW */}
-        <TabsContent value="tv" className="animate-in fade-in h-[700px]">
+        <TabsContent value="tv" className="animate-in fade-in h-[750px]">
           <Card className="h-full flex flex-col border-blue-500/20">
             <CardHeader className="py-3 px-4 border-b bg-muted/30">
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="text-base text-blue-600 font-bold flex items-center gap-2">
-                    TradingView Reference Panel
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">TradingView KHÔNG phát tín hiệu. Chỉ dùng để tham chiếu và copy thông số.</p>
-                </div>
-                <div className="flex gap-2">
-                  <Badge variant="secondary" className="text-xs py-1">BTCUSDT • 3H</Badge>
-                  <Button size="sm" variant="outline" className="h-7 text-xs border-blue-500/50 text-blue-600 hover:bg-blue-50">
-                    <Download className="w-3 h-3 mr-1" /> Copy Parameters to Robot
+              <div className="flex flex-col gap-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle className="text-base text-blue-600 font-bold flex items-center gap-2">
+                      TradingView Reference Panel
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      <strong>Quy tắc hệ thống:</strong> TradingView KHÔNG sinh tín hiệu, KHÔNG gọi API giao dịch. Mọi quyết định do Core Engine thực hiện 100% theo Pine Script.
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-8 text-xs border-blue-500/50 text-blue-600 hover:bg-blue-50">
+                    <Copy className="w-3 h-3 mr-2" /> Copy Parameters to Robot
                   </Button>
                 </div>
+                
+                {/* Reference Meta Data */}
+                <div className="grid grid-cols-6 gap-2 text-xs">
+                  <div className="p-2 border rounded bg-card flex flex-col items-center"><span className="text-muted-foreground">Indicator</span><span className="font-bold">BB+MB</span></div>
+                  <div className="p-2 border rounded bg-card flex flex-col items-center"><span className="text-muted-foreground">Basis</span><span className="font-bold text-indigo-600">SMA</span></div>
+                  <div className="p-2 border rounded bg-card flex flex-col items-center"><span className="text-muted-foreground">Length/Mult</span><span className="font-bold">20 / 2 / 1</span></div>
+                  <div className="p-2 border rounded bg-card flex flex-col items-center"><span className="text-muted-foreground">Source</span><span className="font-bold">Close</span></div>
+                  <div className="p-2 border rounded bg-card flex flex-col items-center"><span className="text-muted-foreground">Exchange</span><span className="font-bold">Binance Futures</span></div>
+                  <div className="p-2 border rounded bg-card flex flex-col items-center"><span className="text-muted-foreground">Compatibility</span><span className="font-bold text-green-600">✅ Synced</span></div>
+                </div>
+
               </div>
             </CardHeader>
             <CardContent className="flex-1 p-0">

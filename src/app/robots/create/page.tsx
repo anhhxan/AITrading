@@ -74,26 +74,29 @@ export default function RobotWizard() {
           {step === 2 && (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
               <div className="space-y-2">
-                <Label>Nhà cung cấp (Provider)</Label>
+                <Label>Môi trường giao dịch (Environment)</Label>
                 <Select defaultValue="paper">
                   <SelectTrigger>
-                    <SelectValue placeholder="Chọn Provider" />
+                    <SelectValue placeholder="Chọn Environment" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="paper">Paper Trading</SelectItem>
-                    <SelectItem value="binance">Binance</SelectItem>
-                    <SelectItem value="mt5">MT5 Exness</SelectItem>
+                    <SelectItem value="paper">Paper Trading (Demo)</SelectItem>
+                    <SelectItem value="testnet">Binance Testnet</SelectItem>
+                    <SelectItem value="live">Live Trading</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Tài khoản (Account)</Label>
-                <Select defaultValue="acc1">
+                <Label>Nguồn dữ liệu thị trường (Market Data Source)</Label>
+                <Select defaultValue="binance_futures">
                   <SelectTrigger>
-                    <SelectValue placeholder="Chọn Tài khoản" />
+                    <SelectValue placeholder="Chọn Market Data Source" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="acc1">Demo Paper 1</SelectItem>
+                    <SelectItem value="binance_futures">Binance Futures</SelectItem>
+                    <SelectItem value="binance_spot">Binance Spot</SelectItem>
+                    <SelectItem value="mt5">MT5 Exness</SelectItem>
+                    <SelectItem value="bybit">Bybit</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

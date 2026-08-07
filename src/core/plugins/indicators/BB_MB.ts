@@ -32,33 +32,20 @@ export class BB_MB_Indicator implements IIndicator {
       return { ready: false };
     }
 
-    // PineScript: basis = ta.ema(src, length)
-    // Tính EMA
-    const k = 2 / (this.length + 1);
-    
-    // Nếu chưa có EMA, dùng SMA của những cây nến đầu tiên làm EMA ban đầu
-    if (this.currentEma === null) {
-      const sum = this.closeHistory.reduce((a, b) => a + b, 0);
-      this.currentEma = sum / this.length;
-    } else {
-      const currentClose = this.closeHistory[this.closeHistory.length - 1];
-      this.currentEma = (currentClose - this.currentEma) * k + this.currentEma;
-    }
-
-    const basis = this.currentEma;
-
-    // PineScript: dev = mult * ta.stdev(src, length)
-    // Tính Standard Deviation (Stdev luôn dùng trung bình cộng SMA)
+    // PineScript: basis = sma(src, length)
+    // Tính SMA
     const sum = this.closeHistory.reduce((a, b) => a + b, 0);
-    const sma = sum / this.length;
-    const squaredDiffs = this.closeHistory.map(price => Math.pow(price - sma, 2));
+    const basis = sum / this.length;
+
+    // PineScript: dev = mult * stdev(src, length)
+    const squaredDiffs = this.closeHistory.map(price => Math.pow(price - basis, 2));
     const variance = squaredDiffs.reduce((a, b) => a + b, 0) / this.length;
     const stdev = Math.sqrt(variance);
 
     // PineScript & User Convention: 
     // Band 1 = Upper Outer (basis + mult1 * stdev)
     // Band 2 = Upper Inner (basis + mult2 * stdev)
-    // Band 3 = Basis (EMA)
+    // Band 3 = Basis (SMA)
     // Band 4 = Lower Inner (basis - mult2 * stdev)
     // Band 5 = Lower Outer (basis - mult1 * stdev)
     
@@ -75,7 +62,7 @@ export class BB_MB_Indicator implements IIndicator {
       band3,
       band4,
       band5,
-      ema: basis,
+      sma: basis,
       stdev
     };
   }
