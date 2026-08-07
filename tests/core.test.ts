@@ -43,7 +43,7 @@ function runScenario(
       robot['evaluateSignal']({ close: step.close }, mockSnapshot);
       // We know the expected signal from the test case, if it transitioned, it was that signal.
       if (step.expectedSignal) {
-         if (robot.state === RobotState.SIGNAL_DETECTED) {
+         if ((robot.state as any) === RobotState.SIGNAL_DETECTED) {
             console.log(`✅ Passed: Signal matches (${step.expectedSignal})`);
          } else {
             console.error(`❌ FAILED: Expected ${step.expectedSignal}, got NONE`);
