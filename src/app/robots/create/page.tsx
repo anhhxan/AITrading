@@ -73,32 +73,34 @@ export default function RobotWizard() {
           
           {step === 2 && (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-              <div className="space-y-2">
-                <Label>Môi trường giao dịch (Environment)</Label>
-                <Select defaultValue="paper">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn Environment" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="paper">Paper Trading (Demo)</SelectItem>
-                    <SelectItem value="testnet">Binance Testnet</SelectItem>
-                    <SelectItem value="live">Live Trading</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Nguồn dữ liệu thị trường (Market Data Source)</Label>
-                <Select defaultValue="binance_futures">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn Market Data Source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="binance_futures">Binance Futures</SelectItem>
-                    <SelectItem value="binance_spot">Binance Spot</SelectItem>
-                    <SelectItem value="mt5">MT5 Exness</SelectItem>
-                    <SelectItem value="bybit">Bybit</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Market Data Provider</Label>
+                  <Select defaultValue="binance_futures">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Nguồn cấp dữ liệu" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="binance_futures">Binance Futures Data</SelectItem>
+                      <SelectItem value="binance_spot">Binance Spot Data</SelectItem>
+                      <SelectItem value="bybit">Bybit Data</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Execution Provider</Label>
+                  <Select defaultValue="paper">
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sàn giao dịch/Khớp lệnh" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="paper">Paper Trading Engine</SelectItem>
+                      <SelectItem value="binance_testnet">Binance Testnet</SelectItem>
+                      <SelectItem value="binance_live">Binance Live</SelectItem>
+                      <SelectItem value="mt5">MT5 Exness</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           )}
