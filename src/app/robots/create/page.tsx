@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, ArrowRight, CheckCircle2, Rocket } from "lucide-react"
+import { ArrowLeft, ArrowRight, CheckCircle2, Rocket, AlertTriangle } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 export default function RobotWizard() {

@@ -1,0 +1,83 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { StateMachineEngine, RobotState } from '../../engine/runtime/StateMachineEngine';
+import { coreEventBus } from '../../infrastructure/EventBus';
+import { EventFactory } from '../../infrastructure/EventFactory';
+
+describe('Phase 3: State Machine Transition', () => {
+  let engine: StateMachineEngine;
+
+  beforeEach(async () => {
+    engine = new StateMachineEngine();
+    await engine.initialize();
+    engine.registerRobot('RobotSM', 2); // max 2 candles
+  });
+
+  afterEach(async () => {
+    await engine.shutdown();
+  });
+
+  it('SM1: Timeout nếu giá không hồi về (Retracement)', async () => {
+    let timeoutFired = false;
+    coreEventBus.subscribe('ENTRY_TIMEOUT', async () => { timeoutFired = true; });
+
+    const trace = EventFactory.createTrace('t', 'p', 'e', 1);
+
+    // Kích hoạt SIGNAL_DETECTED
+    await coreEventBus.publish(EventFactory.createEvent('SIGNAL_DETECTED', 'RobotSM', trace, {
+      signalSide: 'LONG', currentPrice: 105
+    }) as any);
+    await coreEventBus.waitForIdle('RobotSM');
+    expect(engine.getState('RobotSM')).toBe(RobotState.WAIT_RETRACEMENT);
+
+    // Đẩy nến 1
+    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotSM', trace, {
+        indicators: { BB_MB: { band4: 100, band5: 90 } }
+    }) as any);
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', trace, {
+      candle: { close: 105 } // Giá vẫn ở 105, không hồi về zone [90, 92]
+    }) as any);
+    await coreEventBus.waitForIdle('RobotSM');
+
+    // Đẩy nến 2
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', trace, {
+      candle: { close: 106 }
+    }) as any);
+    await coreEventBus.waitForIdle('RobotSM');
+
+    // Đẩy nến 3 -> Quá timeout (đặt maxTimeout = 2)
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', trace, {
+      candle: { close: 107 }
+    }) as any);
+    await coreEventBus.waitForIdle('RobotSM');
+
+    expect(timeoutFired).toBe(true);
+    expect(engine.getState('RobotSM')).toBe(RobotState.WAIT_SIGNAL);
+  });
+
+  it('SM2: Success chuyển trạng thái sang READY_TO_ENTER', async () => {
+    let readyFired = false;
+    coreEventBus.subscribe('READY_TO_ENTER', async () => { readyFired = true; });
+
+    const trace = EventFactory.createTrace('t', 'p', 'e', 1);
+
+    // Kích hoạt SIGNAL
+    await coreEventBus.publish(EventFactory.createEvent('SIGNAL_DETECTED', 'RobotSM', trace, {
+      signalSide: 'LONG', currentPrice: 105
+    }) as any);
+    
+    // Đẩy Indicator
+    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotSM', trace, {
+        indicators: { BB_MB: { band4: 100, band5: 90 } } // Zone: 90 đến 92 (20% của 10)
+    }) as any);
+
+    // Đẩy nến giá rớt xuống 91 (nằm trong Retracement Zone [90, 92])
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', trace, {
+      candle: { close: 91 }
+    }) as any);
+    
+    await coreEventBus.waitForIdle('RobotSM');
+
+    expect(readyFired).toBe(true);
+    expect(engine.getState('RobotSM')).toBe(RobotState.READY_TO_ENTER);
+  });
+});

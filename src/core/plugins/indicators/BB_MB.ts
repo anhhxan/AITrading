@@ -33,36 +33,37 @@ export class BB_MB_Indicator implements IIndicator {
     }
 
     // PineScript: basis = sma(src, length)
-    // Tính SMA
     const sum = this.closeHistory.reduce((a, b) => a + b, 0);
     const basis = sum / this.length;
 
     // PineScript: dev = mult * stdev(src, length)
+    // TradingView stdev divides by N (population stdev)
     const squaredDiffs = this.closeHistory.map(price => Math.pow(price - basis, 2));
     const variance = squaredDiffs.reduce((a, b) => a + b, 0) / this.length;
     const stdev = Math.sqrt(variance);
 
-    // PineScript & User Convention: 
-    // Band 1 = Upper Outer (basis + mult1 * stdev)
-    // Band 2 = Upper Inner (basis + mult2 * stdev)
-    // Band 3 = Basis (SMA)
-    // Band 4 = Lower Inner (basis - mult2 * stdev)
-    // Band 5 = Lower Outer (basis - mult1 * stdev)
+    const UpperOuter = basis + this.mult1 * stdev;
+    const UpperInner = basis + this.mult2 * stdev;
+    const Middle = basis;
+    const LowerInner = basis - this.mult2 * stdev;
+    const LowerOuter = basis - this.mult1 * stdev;
+
+    // Bandwidth = (Upper - Lower) / Basis * 100
+    const Bandwidth = ((UpperOuter - LowerOuter) / basis) * 100;
     
-    const band1 = basis + this.mult1 * stdev; 
-    const band2 = basis + this.mult2 * stdev; 
-    const band3 = basis;                      
-    const band4 = basis - this.mult2 * stdev; 
-    const band5 = basis - this.mult1 * stdev; 
+    // %B = (Current - Lower) / (Upper - Lower)
+    const lastClose = this.closeHistory[this.closeHistory.length - 1];
+    const PercentB = UpperOuter === LowerOuter ? 0 : (lastClose - LowerOuter) / (UpperOuter - LowerOuter);
 
     return {
       ready: true,
-      band1,
-      band2,
-      band3,
-      band4,
-      band5,
-      sma: basis,
+      UpperOuter,
+      UpperInner,
+      Middle,
+      LowerInner,
+      LowerOuter,
+      Bandwidth,
+      PercentB,
       stdev
     };
   }
