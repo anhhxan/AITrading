@@ -1,30 +1,56 @@
-import { BaseEvent } from "../../infrastructure/EventFactory";
+import { supabase } from '../../../lib/supabaseClient';
+import { coreEventBus } from '../../infrastructure/EventBus';
+import { IEngine, EngineHealth } from '../runtime/IEngine';
+import { Clock } from '../../infrastructure/Clock';
 
-/**
- * Hiến pháp Core Engine - Mục 11: CQRS Pattern
- * Đây là nơi DUY NHẤT được phép UPDATE Database.
- */
-export class CQRSProjection {
-  
-  /**
-   * Lắng nghe một Event và chiếu (project) nó xuống Database.
-   * Cần có một Repository layer đứng sau class này.
-   */
-  public async projectEvent(event: BaseEvent): Promise<void> {
-    console.log(`[CQRS Projection] Persisting event ${event.eventType} for Robot ${event.robotId}`);
+export class CQRSProjection implements IEngine {
+  private health: EngineHealth;
+  private unsubscribeFuncs: Array<() => void> = [];
+
+  constructor() {
+    this.health = {
+      engineId: 'CQRSProjection',
+      status: 'STARTING',
+      heartbeat: Clock.now(),
+      uptime: 0,
+      lastError: null,
+      restartCount: 0
+    };
+  }
+
+  public async initialize(): Promise<void> {
+    this.health.status = 'READY';
     
-    // Switch case cho từng loại Event để update bảng tương ứng.
-    switch (event.eventType) {
-      case 'POSITION_OPENED_EVENT':
-        // await PositionRepository.create(...)
-        break;
-      case 'ORDER_FILLED_EVENT':
-        // await OrderRepository.update(...)
-        break;
-      default:
-        // Lưu vào Event Log (Event Sourcing)
-        // await EventRepository.append(event)
-        break;
+    // Đăng ký lắng nghe các sự kiện cập nhật DB
+    this.unsubscribeFuncs.push(
+      coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (event: any) => {
+        this.health.heartbeat = Clock.now();
+        const { robotId } = event;
+        const { newState } = event;
+        
+        const { error } = await supabase
+          .from('robots')
+          .update({ state: newState, updated_at: new Date().toISOString() })
+          .eq('id', robotId);
+          
+        if (error) {
+          console.error('[CQRSProjection] Failed to update robot state', error);
+          throw error;
+        }
+      })
+    );
+  }
+
+  public async shutdown(): Promise<void> {
+    this.health.status = 'SHUTTING_DOWN';
+    for (const unsub of this.unsubscribeFuncs) {
+      unsub();
     }
+    this.unsubscribeFuncs = [];
+    this.health.status = 'ERROR'; // Stopped
+  }
+
+  public healthCheck(): EngineHealth {
+    return this.health;
   }
 }

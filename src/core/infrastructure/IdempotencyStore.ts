@@ -15,6 +15,10 @@ export class IdempotencyStore {
     this.processedKeys.add(key);
   }
   
+  public remove(key: string): void {
+    this.processedKeys.delete(key);
+  }
+
   public clear(): void {
     this.processedKeys.clear();
   }

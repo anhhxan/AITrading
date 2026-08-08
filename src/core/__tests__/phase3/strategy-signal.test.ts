@@ -2,11 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { StrategyEngine } from '../../engine/strategies/StrategyEngine';
 import { coreEventBus } from '../../infrastructure/EventBus';
 import { EventFactory } from '../../infrastructure/EventFactory';
+import { coreIdempotencyStore } from '../../infrastructure/IdempotencyStore';
 
 describe('Phase 3: Strategy Signal Breakout', () => {
   let engine: StrategyEngine;
 
   beforeEach(async () => {
+    coreEventBus.clearAll();
+    coreIdempotencyStore.clear();
     engine = new StrategyEngine();
     await engine.initialize();
   });
@@ -26,15 +29,16 @@ describe('Phase 3: Strategy Signal Breakout', () => {
 
     engine.registerRobot('RobotS1', 'BB_Strategy', { retracementZonePercent: 20 });
 
-    const trace1 = EventFactory.createTrace('t1', 'p1', 'eng', 1);
+    let seq = 1;
+    const createSeqTrace = () => EventFactory.createTrace('t1', 'p1', 'eng', seq++);
     
     // Nến 1: Close nằm giữa B5 và B4 (chuẩn bị bứt phá)
     // Giá = 96, B5 = 90, B4 = 100
-    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotS1', trace1, {
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotS1', createSeqTrace(), {
       candle: { timestamp: 1, open: 96, high: 96, low: 96, close: 96, volume: 1 }
     }) as any);
     
-    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotS1', trace1, {
+    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotS1', createSeqTrace(), {
       indicators: {
         BB_MB: { ready: true, band1: 150, band2: 130, band4: 100, band5: 90 }
       }
@@ -45,12 +49,11 @@ describe('Phase 3: Strategy Signal Breakout', () => {
 
     // Nến 2: Close vượt lên trên B4
     // Giá = 105
-    const trace2 = EventFactory.createTrace('t2', 'p1', 'eng', 2);
-    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotS1', trace2, {
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotS1', createSeqTrace(), {
       candle: { timestamp: 2, open: 105, high: 105, low: 105, close: 105, volume: 1 }
     }) as any);
     
-    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotS1', trace2, {
+    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotS1', createSeqTrace(), {
       indicators: {
         BB_MB: { ready: true, band1: 150, band2: 130, band4: 100, band5: 90 }
       }

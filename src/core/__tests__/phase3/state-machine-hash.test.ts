@@ -3,6 +3,8 @@ import * as crypto from 'crypto';
 import { StateMachineEngine } from '../../engine/runtime/StateMachineEngine';
 import { coreEventBus } from '../../infrastructure/EventBus';
 import { EventFactory } from '../../infrastructure/EventFactory';
+import { Clock } from '../../infrastructure/Clock';
+import { IdGenerator } from '../../infrastructure/IdGenerator';
 
 describe('Phase 3: State Machine Deterministic Hash', () => {
   let engine: StateMachineEngine;
@@ -52,20 +54,18 @@ describe('Phase 3: State Machine Deterministic Hash', () => {
        await runReplay();
     }
 
-    // Vì EventFactory.createEvent sử dụng uuidv4() và Clock.now() thực tế nên các payload.eventId sẽ luôn khác nhau.
-    // Thực tế ReplayEngine sẽ can thiệp để đảm bảo 100% deterministic, ta sẽ hash các logic field.
-    
-    const logicOnlyHashList: string[] = [];
+    const runFullHashReplay = async () => {
+      // Bật chế độ Deterministic cho Replay
+      Clock.setTime(1620000000000);
+      IdGenerator.setDeterministic('replay-mock');
 
-    const runLogicReplay = async () => {
       engine = new StateMachineEngine();
       await engine.initialize();
       engine.registerRobot('RobotHash', 2);
   
       let eventOutput: any = null;
       const unsub = coreEventBus.subscribe('READY_TO_ENTER', async (evt: any) => {
-        // Chỉ bóc tách phần logic
-        eventOutput = { side: evt.signalSide, price: evt.entryPrice };
+        eventOutput = evt; // Lấy TẤT CẢ event, không bóc tách
       });
   
       const trace = EventFactory.createTrace('corr1', 'p1', 'eng', 1);
@@ -85,19 +85,19 @@ describe('Phase 3: State Machine Deterministic Hash', () => {
       await coreEventBus.waitForIdle('RobotHash');
       
       const str = JSON.stringify(eventOutput);
-      logicOnlyHashList.push(crypto.createHash('sha256').update(str).digest('hex'));
+      hashList.push(crypto.createHash('sha256').update(str).digest('hex'));
       
       unsub();
       await engine.shutdown();
     };
 
     for(let i = 0; i < 100; i++) {
-        await runLogicReplay();
+        await runFullHashReplay();
     }
 
-    const firstHash = logicOnlyHashList[0];
+    const firstHash = hashList[0];
     for (let i = 1; i < 100; i++) {
-      expect(logicOnlyHashList[i]).toBe(firstHash);
+      expect(hashList[i]).toBe(firstHash);
     }
   });
 });

@@ -1,5 +1,5 @@
-import { v4 as uuidv4 } from "uuid";
 import { Clock } from "./Clock";
+import { IdGenerator } from "./IdGenerator";
 
 /**
  * Hiến pháp Core Engine - Mục 2: Traceability
@@ -35,7 +35,7 @@ export class EventFactory {
     sequence: number
   ): DecisionTrace {
     return {
-      traceId: uuidv4(),
+      traceId: IdGenerator.generate(),
       correlationId,
       parentId,
       engineId,
@@ -49,7 +49,7 @@ export class EventFactory {
     trace: DecisionTrace,
     payload: T
   ): BaseEvent & T {
-    const eventId = uuidv4();
+    const eventId = IdGenerator.generate();
     const timestamp = Clock.now();
     
     // Golden Rule 9: Idempotency Key tự sinh từ bối cảnh

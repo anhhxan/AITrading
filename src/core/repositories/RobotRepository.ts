@@ -48,40 +48,23 @@ export class RobotRepository {
   }
 
   /**
-   * Tạo Robot mới (Chỉ INSERT, dùng UUID và trả về ID)
+   * Tạo Robot mới
    */
   async createRobot(payload: Partial<RobotProfile>): Promise<string> {
-    const { data, error } = await supabase
-      .from('robots')
-      .insert([payload])
-      .select('id')
-      .single();
-
-    if (error) throw error;
-    return data.id;
+    throw new Error('CQRS Violation: RobotRepository is read-only. Use Command/Event flow to create.');
   }
 
   /**
-   * Chuyển trạng thái Robot (Cập nhật State)
+   * Chuyển trạng thái Robot
    */
   async updateState(robotId: string, newState: string): Promise<void> {
-    const { error } = await supabase
-      .from('robots')
-      .update({ state: newState, updated_at: new Date().toISOString() })
-      .eq('id', robotId);
-
-    if (error) throw error;
+    throw new Error('CQRS Violation: RobotRepository is read-only. Use Command/Event flow to update state.');
   }
 
   /**
-   * Soft Delete Robot (Chỉ set deleted_at)
+   * Soft Delete Robot
    */
   async softDeleteRobot(robotId: string): Promise<void> {
-    const { error } = await supabase
-      .from('robots')
-      .update({ deleted_at: new Date().toISOString(), is_active: false })
-      .eq('id', robotId);
-
-    if (error) throw error;
+    throw new Error('CQRS Violation: RobotRepository is read-only. Use Command/Event flow to delete.');
   }
 }
