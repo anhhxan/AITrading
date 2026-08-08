@@ -60,7 +60,7 @@ export class StrategyEngine implements IEngine {
       currentPrice
     });
 
-    if (signal && signal.direction !== 'NONE') {
+    if (signal !== 'ERROR' && signal && signal.direction !== 'NONE') {
        const trace = EventFactory.createTrace(
          event.trace.correlationId,
          event.eventId,

@@ -69,7 +69,7 @@ export class PluginLoader {
     }
   }
 
-  public static safeEvaluateStrategy(strategy: IStrategy, context: StrategyContext): SignalSide | 'ERROR' {
+  public static safeEvaluateStrategy(strategy: IStrategy, context: StrategyContext): { direction: SignalSide; maxTimeoutCandles?: number; entryTrigger?: { type: string; lower: number; upper: number } } | 'ERROR' {
     try {
       return strategy.evaluate(context);
     } catch (error) {

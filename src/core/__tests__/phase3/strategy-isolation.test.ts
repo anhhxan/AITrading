@@ -5,7 +5,7 @@ import { IStrategy, StrategyContext, SignalSide } from '../../interfaces/PluginI
 class CrashStrategy implements IStrategy {
   name = 'CrashStrategy';
   init() {}
-  evaluate(context: StrategyContext): SignalSide {
+  evaluate(context: StrategyContext): { direction: SignalSide } {
     throw new Error('Crash from strategy');
   }
 }

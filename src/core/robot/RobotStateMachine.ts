@@ -69,8 +69,8 @@ export class RobotStateMachine {
 
     const signal = this.strategyPlugin.evaluate(context);
     
-    if (signal !== 'NONE') {
-      this.transitionTo(RobotState.SIGNAL_DETECTED, { side: signal, price: candleData.close });
+    if (signal && signal.direction !== 'NONE') {
+      this.transitionTo(RobotState.SIGNAL_DETECTED, { side: signal.direction, price: candleData.close });
       this.currentTimeoutCount = 0;
     }
   }
