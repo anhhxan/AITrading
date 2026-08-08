@@ -6,6 +6,8 @@ import { IIndicator, Candle } from '../../interfaces/PluginInterfaces';
 class CrashPlugin implements IIndicator {
   public name = 'CRASH_PLUGIN';
   init() {}
+  validate() { return true; }
+  warmup() {}
   update(candle: Candle): Record<string, any> {
     throw new Error("I am a bad plugin");
   }
@@ -16,6 +18,8 @@ class CrashPlugin implements IIndicator {
 class GoodPlugin implements IIndicator {
   public name = 'GOOD_PLUGIN';
   init() {}
+  validate() { return true; }
+  warmup() {}
   update(candle: Candle): Record<string, any> {
     return { ready: true, value: candle.close };
   }
