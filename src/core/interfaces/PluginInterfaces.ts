@@ -27,6 +27,12 @@ export interface IIndicator {
   /** Initialize with JSON parameters */
   init(params: Record<string, any>): void;
   
+  /** Validate parameters to ensure they are correct (e.g. length > 0) */
+  validate(): boolean;
+
+  /** Pre-load historical candles to reach READY state instantly */
+  warmup(candles: Candle[]): void;
+
   /** Update with a new candle and return computed values snapshot */
   update(candle: Candle): Record<string, any>;
   

@@ -25,6 +25,17 @@ export class PluginLoader {
   }
 
   /**
+   * Warmup một Plugin với dữ liệu lịch sử
+   */
+  public static warmup(indicator: IIndicator, historicalCandles: Candle[]): void {
+    try {
+      indicator.warmup(historicalCandles);
+    } catch (error) {
+      console.error(`[PluginLoader] FATAL: Indicator Plugin ${indicator.name} crashed during warmup!`, error);
+    }
+  }
+
+  /**
    * Cô lập (Isolation): Gọi update trong một sandbox an toàn
    * Đảm bảo một plugin bị lỗi không làm sập tiến trình chung của Engine.
    */

@@ -18,6 +18,7 @@ export class EventBus {
   private deadLetterQueues: Map<string, BaseEvent[]> = new Map();
   private pendingQueues: Map<string, BaseEvent[]> = new Map();
   private expectedSequences: Map<string, number> = new Map();
+  private currentProcessingSequences: Map<string, number> = new Map();
 
   public subscribe<T extends BaseEvent>(eventType: string, handler: EventHandler<T>): () => void {
     if (!this.handlers.has(eventType)) {
@@ -50,20 +51,33 @@ export class EventBus {
     if (!this.deadLetterQueues.has(robotId)) this.deadLetterQueues.set(robotId, []);
     if (!this.pendingQueues.has(robotId)) this.pendingQueues.set(robotId, []);
     if (!this.expectedSequences.has(robotId)) this.expectedSequences.set(robotId, event.trace.sequence);
+    if (!this.currentProcessingSequences.has(robotId)) this.currentProcessingSequences.set(robotId, -1);
 
     const seq = event.trace.sequence;
     const expected = this.expectedSequences.get(robotId)!;
+    const current = this.currentProcessingSequences.get(robotId)!;
+
+    const dlq = this.deadLetterQueues.get(robotId) || [];
+    const isRetry = dlq.some(e => e.eventId === event.eventId);
+    if (isRetry) {
+      this.deadLetterQueues.set(robotId, dlq.filter(e => e.eventId !== event.eventId));
+    }
+
+    const isInternalCausal = (seq === current);
+
+    if (isInternalCausal) {
+      this.queues.get(robotId)!.unshift(event);
+      this.processQueue(robotId);
+      return;
+    }
 
     if (seq > expected) {
       // Out of order, hold in pending
       this.pendingQueues.get(robotId)!.push(event);
       return;
     } else if (seq < expected) {
-      const dlq = this.deadLetterQueues.get(robotId) || [];
-      const isRetry = dlq.some(e => e.eventId === event.eventId);
       if (isRetry) {
-        // Remove from DLQ and process
-        this.deadLetterQueues.set(robotId, dlq.filter(e => e.eventId !== event.eventId));
+        // Retry -> process it
         this.queues.get(robotId)!.push(event);
         this.processQueue(robotId);
         return;
@@ -109,8 +123,12 @@ export class EventBus {
     const queue = this.queues.get(robotId)!;
     
     while (queue.length > 0) {
-      // FIFO: Lấy Event cũ nhất ra xử lý
+      // Lấy Event ra xử lý
       const event = queue.shift()!; 
+      
+      // Update current processing sequence
+      this.currentProcessingSequences.set(robotId, event.trace.sequence);
+
       const handlers = this.handlers.get(event.eventType) || [];
       
       // Xử lý tuần tự các handler của cùng 1 event
@@ -169,6 +187,7 @@ export class EventBus {
     this.deadLetterQueues.clear();
     this.pendingQueues.clear();
     this.expectedSequences.clear();
+    this.currentProcessingSequences.clear();
     this.isShuttingDown = false;
   }
 }

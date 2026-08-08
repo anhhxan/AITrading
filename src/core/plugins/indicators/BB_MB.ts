@@ -11,9 +11,21 @@ export class BB_MB_Indicator implements IIndicator {
   private currentEma: number | null = null;
 
   public init(params: Record<string, any>): void {
-    if (params.length) this.length = params.length;
-    if (params.mult) this.mult1 = params.mult;
-    if (params.mult2) this.mult2 = params.mult2;
+    if (params.length !== undefined) this.length = params.length;
+    if (params.mult !== undefined) this.mult1 = params.mult;
+    if (params.mult2 !== undefined) this.mult2 = params.mult2;
+  }
+
+  public validate(): boolean {
+    if (this.length <= 0) return false;
+    if (this.mult1 <= 0 || this.mult2 <= 0) return false;
+    return true;
+  }
+
+  public warmup(candles: Candle[]): void {
+    for (const candle of candles) {
+      this.update(candle);
+    }
   }
 
   public update(candle: Candle): Record<string, any> {
