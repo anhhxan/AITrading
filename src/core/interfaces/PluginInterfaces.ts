@@ -91,8 +91,12 @@ export interface IStrategy {
   /** Initialize with JSON parameters */
   init(params: Record<string, any>): void;
   
-  /** Evaluate the market and return LONG/SHORT signal if conditions met */
-  evaluate(context: StrategyContext): SignalSide;
+  /** Evaluate the market and return strategy output if conditions met */
+  evaluate(context: StrategyContext): {
+    direction: SignalSide;
+    maxTimeoutCandles?: number;
+    entryTrigger?: { type: string; lower: number; upper: number };
+  };
 }
 
 // ==========================================

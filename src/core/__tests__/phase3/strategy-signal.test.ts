@@ -22,9 +22,9 @@ describe('Phase 3: Strategy Signal Breakout', () => {
     let signalFired = false;
     let signalSide = '';
     
-    const unsub = coreEventBus.subscribe('SIGNAL_DETECTED', async (evt: any) => {
+    const unsub = coreEventBus.subscribe('STRATEGY_SIGNAL_EVENT', async (evt: any) => {
       signalFired = true;
-      signalSide = evt.signalSide;
+      signalSide = evt.direction;
     });
 
     engine.registerRobot('RobotS1', 'BB_Strategy', { retracementZonePercent: 20 });
@@ -40,7 +40,7 @@ describe('Phase 3: Strategy Signal Breakout', () => {
     
     await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotS1', createSeqTrace(), {
       indicators: {
-        BB_MB: { ready: true, band1: 150, band2: 130, band4: 100, band5: 90 }
+        BB_MB: { ready: true, line1: 150, line2: 130, line4: 100, line5: 90 }
       }
     }) as any);
     
@@ -55,7 +55,7 @@ describe('Phase 3: Strategy Signal Breakout', () => {
     
     await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotS1', createSeqTrace(), {
       indicators: {
-        BB_MB: { ready: true, band1: 150, band2: 130, band4: 100, band5: 90 }
+        BB_MB: { ready: true, line1: 150, line2: 130, line4: 100, line5: 90 }
       }
     }) as any);
     

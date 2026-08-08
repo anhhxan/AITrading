@@ -39,6 +39,7 @@ export class EventBus {
     }
 
     const robotId = event.robotId;
+    console.error(`[EventBus] publish called for ${event.eventType} seq: ${event.trace.sequence}`);
     
     // Idempotency check
     if (coreIdempotencyStore.hasSeen(event.idempotencyKey) || coreIdempotencyStore.hasSeen(event.eventId)) {
@@ -130,6 +131,7 @@ export class EventBus {
       this.currentProcessingSequences.set(robotId, event.trace.sequence);
 
       const handlers = this.handlers.get(event.eventType) || [];
+      console.error(`[EventBus] processing ${event.eventType} for ${robotId}. Handlers count: ${handlers.length}`);
       
       // Xử lý tuần tự các handler của cùng 1 event
       for (const handler of handlers) {

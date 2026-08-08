@@ -1,9 +1,7 @@
 import { BaseEvent, EventFactory } from "../../infrastructure/EventFactory";
 import { coreEventBus } from "../../infrastructure/EventBus";
 import { IEngine } from "./IEngine";
-import { SignalDetectedEvent } from "../strategies/StrategyEngine";
-import { BB_Strategy } from "../../plugins/strategies/BB_Strategy";
-import { IndicatorUpdatedEvent } from "../indicators/IndicatorEngine";
+import { StrategySignalEvent } from "../strategies/StrategyEngine";
 
 export enum RobotState {
   WAIT_SIGNAL = 'WAIT_SIGNAL',
@@ -11,13 +9,11 @@ export enum RobotState {
   READY_TO_ENTER = 'READY_TO_ENTER'
 }
 
-export interface ReadyToEnterEvent extends BaseEvent {
-  signalSide: 'LONG' | 'SHORT';
-  entryPrice: number;
-}
-
-export interface EntryTimeoutEvent extends BaseEvent {
+export interface StateTransitionEvent extends BaseEvent {
+  previousState: RobotState;
+  newState: RobotState;
   reason: string;
+  triggerPrice?: number;
 }
 
 export class StateMachineEngine implements IEngine {
@@ -25,22 +21,16 @@ export class StateMachineEngine implements IEngine {
   private status: 'READY' | 'STARTING' | 'ERROR' | 'STOPPED' = 'STOPPED';
   
   private states: Map<string, RobotState> = new Map();
-  private signalSides: Map<string, 'LONG' | 'SHORT'> = new Map();
   private timeoutCounts: Map<string, number> = new Map();
-  private latestIndicators: Map<string, any> = new Map();
-  private maxTimeoutCandles: Map<string, number> = new Map();
+  private activeSignals: Map<string, StrategySignalEvent> = new Map();
 
   private unsubs: (() => void)[] = [];
 
   public async initialize(): Promise<void> {
     this.status = 'STARTING';
     
-    this.unsubs.push(coreEventBus.subscribe('SIGNAL_DETECTED', async (e: SignalDetectedEvent) => {
+    this.unsubs.push(coreEventBus.subscribe('STRATEGY_SIGNAL_EVENT', async (e: StrategySignalEvent) => {
        await this.handleSignalDetected(e);
-    }));
-
-    this.unsubs.push(coreEventBus.subscribe('INDICATOR_UPDATED', async (e: IndicatorUpdatedEvent) => {
-       this.latestIndicators.set(e.robotId, e.indicators['BB_MB'] || Object.values(e.indicators)[0]);
     }));
 
     this.unsubs.push(coreEventBus.subscribe('CANDLE_CLOSED', async (e: any) => {
@@ -50,19 +40,22 @@ export class StateMachineEngine implements IEngine {
     this.status = 'READY';
   }
 
-  public registerRobot(robotId: string, maxTimeout: number = 3) {
+  public registerRobot(robotId: string, _legacyMaxTimeout: number = 3) {
     this.states.set(robotId, RobotState.WAIT_SIGNAL);
-    this.maxTimeoutCandles.set(robotId, maxTimeout);
   }
 
-  private async handleSignalDetected(event: SignalDetectedEvent) {
+  private async handleSignalDetected(event: StrategySignalEvent) {
+    console.log('[StateMachineEngine] handleSignalDetected:', event.eventType, event.direction);
+    if (event.direction === 'NONE') return;
+
     const robotId = event.robotId;
     const currentState = this.states.get(robotId) || RobotState.WAIT_SIGNAL;
     
-    if (currentState === RobotState.WAIT_SIGNAL) {
+    // Switch to WAIT_RETRACEMENT and Override any existing signal
+    if (currentState === RobotState.WAIT_SIGNAL || currentState === RobotState.WAIT_RETRACEMENT) {
       this.states.set(robotId, RobotState.WAIT_RETRACEMENT);
-      this.signalSides.set(robotId, event.signalSide);
-      this.timeoutCounts.set(robotId, 0);
+      this.activeSignals.set(robotId, event);
+      this.timeoutCounts.set(robotId, 0); // Reset timeout
     }
   }
 
@@ -71,39 +64,70 @@ export class StateMachineEngine implements IEngine {
     const currentState = this.states.get(robotId);
     
     if (currentState === RobotState.WAIT_RETRACEMENT) {
+      const activeSignal = this.activeSignals.get(robotId);
+      if (!activeSignal) return;
+
+      const currentPrice = event.candle.close;
+      const trigger = activeSignal.entryTrigger;
+
+      // 1. Check Trigger FIRST
+      let isTriggered = false;
+      if (trigger && currentPrice >= trigger.lower && currentPrice <= trigger.upper) {
+        isTriggered = true;
+      }
+
+      if (isTriggered) {
+        this.states.set(robotId, RobotState.READY_TO_ENTER);
+        
+        const trace = EventFactory.createTrace(
+          activeSignal.trace.correlationId, // Preserve original correlationId
+          event.eventId,                    // Parent is the triggering candle
+          this.engineId, 
+          event.trace.sequence              // Sequence of the triggering candle
+        );
+
+        const transitionEvent = EventFactory.createEvent(
+          'STATE_TRANSITION_EVENT', 
+          robotId, 
+          trace, 
+          { 
+            previousState: RobotState.WAIT_RETRACEMENT,
+            newState: RobotState.READY_TO_ENTER,
+            reason: 'TRIGGER_MATCHED',
+            triggerPrice: currentPrice
+          }
+        );
+        await coreEventBus.publish(transitionEvent as any);
+        return;
+      }
+
+      // 2. If not triggered, check Timeout
       let count = (this.timeoutCounts.get(robotId) || 0) + 1;
       this.timeoutCounts.set(robotId, count);
 
-      const maxTimeout = this.maxTimeoutCandles.get(robotId) || 3;
+      const maxTimeout = activeSignal.maxTimeoutCandles || 3;
 
       if (count > maxTimeout) {
         this.states.set(robotId, RobotState.WAIT_SIGNAL);
         
-        const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
-        const timeoutEvent = EventFactory.createEvent('ENTRY_TIMEOUT', robotId, trace, { reason: 'TIMEOUT' });
-        await coreEventBus.publish(timeoutEvent as any);
-        return;
-      }
-
-      // Check Retracement Zone (Sử dụng tạm class trực tiếp đúng nguyên tắc Make it Work)
-      const signalSide = this.signalSides.get(robotId)!;
-      const indicator = this.latestIndicators.get(robotId);
-      const currentPrice = event.candle.close;
-
-      if (!indicator) return;
-
-      const strategy = new BB_Strategy();
-      strategy.init({ retracementZonePercent: 20 });
-      const inZone = strategy.isPriceInRetracementZone(signalSide, currentPrice, indicator);
-
-      if (inZone) {
-        this.states.set(robotId, RobotState.READY_TO_ENTER);
+        const trace = EventFactory.createTrace(
+          activeSignal.trace.correlationId,
+          event.eventId, 
+          this.engineId, 
+          event.trace.sequence
+        );
         
-        const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
-        const enterEvent = EventFactory.createEvent('READY_TO_ENTER', robotId, trace, { 
-          signalSide, entryPrice: currentPrice 
-        });
-        await coreEventBus.publish(enterEvent as any);
+        const transitionEvent = EventFactory.createEvent(
+          'STATE_TRANSITION_EVENT', 
+          robotId, 
+          trace, 
+          { 
+            previousState: RobotState.WAIT_RETRACEMENT,
+            newState: RobotState.WAIT_SIGNAL,
+            reason: 'TIMEOUT'
+          }
+        );
+        await coreEventBus.publish(transitionEvent as any);
       }
     }
   }

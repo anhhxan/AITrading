@@ -21,19 +21,21 @@ describe('Phase 3: State Machine Transition', () => {
 
   it('SM1: Timeout nếu giá không hồi về (Retracement)', async () => {
     let timeoutFired = false;
-    coreEventBus.subscribe('ENTRY_TIMEOUT', async () => { timeoutFired = true; });
+    coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (e: any) => { 
+      if (e.reason === 'TIMEOUT') timeoutFired = true; 
+    });
 
     let seq = 1;
     const createSeqTrace = () => EventFactory.createTrace('t', 'p', 'e', seq++);
 
-    // Kích hoạt SIGNAL_DETECTED
-    await coreEventBus.publish(EventFactory.createEvent('SIGNAL_DETECTED', 'RobotSM', createSeqTrace(), {
-      signalSide: 'LONG', currentPrice: 105
+    // Kích hoạt SIGNAL
+    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotSM', createSeqTrace(), {
+      direction: 'LONG', maxTimeoutCandles: 2, entryTrigger: { type: 'RETRACEMENT_ZONE', lower: 90, upper: 92 }
     }) as any);
     await coreEventBus.waitForIdle('RobotSM');
     expect(engine.getState('RobotSM')).toBe(RobotState.WAIT_RETRACEMENT);
 
-    // Đẩy nến 1
+    // Đẩy Indicator (Indicator ko còn được dùng trực tiếp bởi StateMachine nữa, nhưng giữ để khớp Event Pipeline)
     await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotSM', createSeqTrace(), {
         indicators: { BB_MB: { band4: 100, band5: 90 } }
     }) as any);
@@ -60,14 +62,16 @@ describe('Phase 3: State Machine Transition', () => {
 
   it('SM2: Success chuyển trạng thái sang READY_TO_ENTER', async () => {
     let readyFired = false;
-    coreEventBus.subscribe('READY_TO_ENTER', async () => { readyFired = true; });
+    coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (e: any) => { 
+      if (e.newState === RobotState.READY_TO_ENTER) readyFired = true; 
+    });
 
     let seq = 1;
     const createSeqTrace = () => EventFactory.createTrace('t', 'p', 'e', seq++);
 
     // Kích hoạt SIGNAL
-    await coreEventBus.publish(EventFactory.createEvent('SIGNAL_DETECTED', 'RobotSM', createSeqTrace(), {
-      signalSide: 'LONG', currentPrice: 105
+    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotSM', createSeqTrace(), {
+      direction: 'LONG', maxTimeoutCandles: 2, entryTrigger: { type: 'RETRACEMENT_ZONE', lower: 90, upper: 92 }
     }) as any);
     
     // Đẩy Indicator

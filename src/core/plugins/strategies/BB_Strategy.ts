@@ -14,24 +14,25 @@ export class BB_Strategy implements IStrategy {
     if (params.timeoutCandles) this.timeoutCandles = params.timeoutCandles;
   }
 
-  public evaluate(context: StrategyContext): SignalSide {
+  public evaluate(context: StrategyContext): any {
     const { indicatorSnapshot, currentPrice } = context;
     
     // Need enough data
     if (!indicatorSnapshot.ready || this.previousClose === null) {
       this.previousClose = currentPrice;
-      return 'NONE';
+      return { direction: 'NONE' };
     }
 
     const prevClose = this.previousClose;
     const currClose = currentPrice;
     
-    const b1 = indicatorSnapshot.band1; // Upper Outer (Highest)
-    const b2 = indicatorSnapshot.band2; // Upper Inner
-    const b4 = indicatorSnapshot.band4; // Lower Inner
-    const b5 = indicatorSnapshot.band5; // Lower Outer (Lowest)
+    const b1 = indicatorSnapshot.line1; // Upper Outer (Highest)
+    const b2 = indicatorSnapshot.line2; // Upper Inner
+    const b4 = indicatorSnapshot.line4; // Lower Inner
+    const b5 = indicatorSnapshot.line5; // Lower Outer (Lowest)
 
     let signal: SignalSide = 'NONE';
+    console.log(`[BB_Strategy] prevClose=${prevClose}, currClose=${currClose}, b5=${b5}, b4=${b4}, b2=${b2}, b1=${b1}`);
 
     // LONG RULE:
     // Nến trước: Close nằm giữa Band 5 và Band 4
@@ -47,42 +48,33 @@ export class BB_Strategy implements IStrategy {
       signal = 'SHORT';
     }
 
+    // Calculate trigger based on signal
+    let entryTrigger;
+    if (signal === 'LONG') {
+      const distance = b4 - b5;
+      const zoneValue = distance * (this.retracementZonePercent / 100);
+      entryTrigger = {
+        type: 'RETRACEMENT_ZONE',
+        lower: b5,
+        upper: b5 + zoneValue
+      };
+    } else if (signal === 'SHORT') {
+      const distance = b1 - b2;
+      const zoneValue = distance * (this.retracementZonePercent / 100);
+      entryTrigger = {
+        type: 'RETRACEMENT_ZONE',
+        lower: b1 - zoneValue,
+        upper: b1
+      };
+    }
+
     // Save current close for next iteration
     this.previousClose = currClose;
     
-    return signal;
-  }
-  
-  /**
-   * Helper function used by the Signal Engine to determine if price hit the Entry Zone.
-   */
-  public isPriceInRetracementZone(side: SignalSide, currentPrice: number, snapshot: any): boolean {
-    if (side === 'LONG') {
-      const b4 = snapshot.band4;
-      const b5 = snapshot.band5;
-      const distance = b4 - b5; // b4 is higher than b5
-      const zoneValue = distance * (this.retracementZonePercent / 100);
-      
-      // Entry Zone for LONG: from Band5 up to (Band5 + zoneValue)
-      const entryZoneBottom = b5;
-      const entryZoneTop = b5 + zoneValue;
-      
-      return currentPrice >= entryZoneBottom && currentPrice <= entryZoneTop;
-    } 
-    else if (side === 'SHORT') {
-      const b1 = snapshot.band1;
-      const b2 = snapshot.band2;
-      const distance = b1 - b2; // b1 is higher than b2
-      const zoneValue = distance * (this.retracementZonePercent / 100);
-      
-      // Entry Zone for SHORT: from Band1 down to (Band1 - zoneValue)
-      // Since it's a SHORT, we want price to retrace up towards Band1
-      const entryZoneTop = b1;
-      const entryZoneBottom = b1 - zoneValue;
-      
-      return currentPrice <= entryZoneTop && currentPrice >= entryZoneBottom;
-    }
-    
-    return false;
+    return {
+      direction: signal,
+      maxTimeoutCandles: this.timeoutCandles,
+      entryTrigger
+    };
   }
 }

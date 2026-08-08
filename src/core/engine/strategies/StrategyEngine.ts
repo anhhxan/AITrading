@@ -5,9 +5,16 @@ import { IStrategy } from "../../interfaces/PluginInterfaces";
 import { IEngine } from "../runtime/IEngine";
 import { IndicatorUpdatedEvent } from "../indicators/IndicatorEngine";
 
-export interface SignalDetectedEvent extends BaseEvent {
-  signalSide: 'LONG' | 'SHORT';
-  currentPrice: number;
+export interface StrategySignalEvent extends BaseEvent {
+  direction: 'LONG' | 'SHORT' | 'NONE';
+  maxTimeoutCandles: number;
+  entryTrigger?: {
+    type: string;
+    lower: number;
+    upper: number;
+  };
+  strategyId: string;
+  strategyVersion: string;
 }
 
 export class StrategyEngine implements IEngine {
@@ -53,7 +60,7 @@ export class StrategyEngine implements IEngine {
       currentPrice
     });
 
-    if (signal === 'LONG' || signal === 'SHORT') {
+    if (signal && signal.direction !== 'NONE') {
        const trace = EventFactory.createTrace(
          event.trace.correlationId,
          event.eventId,
@@ -62,10 +69,16 @@ export class StrategyEngine implements IEngine {
        );
 
        const nextEvent = EventFactory.createEvent(
-         'SIGNAL_DETECTED',
+         'STRATEGY_SIGNAL_EVENT',
          robotId,
          trace,
-         { signalSide: signal, currentPrice }
+         { 
+           direction: signal.direction,
+           maxTimeoutCandles: signal.maxTimeoutCandles || 3,
+           entryTrigger: signal.entryTrigger,
+           strategyId: strategy.name,
+           strategyVersion: 'v1.0.0'
+         }
        );
        
        await coreEventBus.publish(nextEvent as any);

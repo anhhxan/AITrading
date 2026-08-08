@@ -20,14 +20,14 @@ describe('Phase 3: State Machine Deterministic Hash', () => {
     engine.registerRobot('RobotHash', 2);
 
     let eventOutput: any = null;
-    const unsub = coreEventBus.subscribe('READY_TO_ENTER', async (evt: any) => {
+    const unsub = coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (evt: any) => {
       eventOutput = evt; // Lấy TẤT CẢ event, không bóc tách
     });
 
     const trace = EventFactory.createTrace('corr1', 'p1', 'eng', 1);
 
-    await coreEventBus.publish(EventFactory.createEvent('SIGNAL_DETECTED', 'RobotHash', trace, {
-      signalSide: 'LONG', currentPrice: 105
+    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotHash', trace, {
+      direction: 'LONG', maxTimeoutCandles: 2, entryTrigger: { type: 'RETRACEMENT_ZONE', lower: 90, upper: 92 }
     }) as any);
     
     await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotHash', trace, {
@@ -68,14 +68,14 @@ describe('Phase 3: State Machine Deterministic Hash', () => {
       engine.registerRobot('RobotHash', 2);
   
       let eventOutput: any = null;
-      const unsub = coreEventBus.subscribe('READY_TO_ENTER', async (evt: any) => {
+      const unsub = coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (evt: any) => {
         eventOutput = evt; // Lấy TẤT CẢ event, không bóc tách
       });
   
       const trace = EventFactory.createTrace('corr1', 'p1', 'eng', 1);
   
-      await coreEventBus.publish(EventFactory.createEvent('SIGNAL_DETECTED', 'RobotHash', trace, {
-        signalSide: 'LONG', currentPrice: 105
+      await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotHash', trace, {
+        direction: 'LONG', maxTimeoutCandles: 2, entryTrigger: { type: 'RETRACEMENT_ZONE', lower: 90, upper: 92 }
       }) as any);
       
       await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotHash', trace, {

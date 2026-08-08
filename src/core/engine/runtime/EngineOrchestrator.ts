@@ -22,6 +22,7 @@ export class EngineOrchestrator {
       'MarketDataEngine', 
       'IndicatorEngine', 
       'StrategyEngine', 
+      'StateMachineEngine',
       'RiskEngine', 
       'OrderManagerEngine', 
       'ExecutionEngine', 
