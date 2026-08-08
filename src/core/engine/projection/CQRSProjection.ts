@@ -53,4 +53,8 @@ export class CQRSProjection implements IEngine {
   public healthCheck(): EngineHealth {
     return this.health;
   }
+
+  public ready(): boolean {
+    return this.health.status === 'READY';
+  }
 }
