@@ -25,6 +25,16 @@ describe('Phase 2: BB_MB Plugin Warmup & Logic', () => {
     // 20th candle
     const result20 = PluginLoader.safeUpdate(bb, createMockCandle(120));
     expect(result20.ready).toBe(true);
+    expect(result20.line1).toBeDefined();
+    expect(result20.line2).toBeDefined();
+    expect(result20.line3).toBeDefined();
+    expect(result20.line4).toBeDefined();
+    expect(result20.line5).toBeDefined();
+    expect(result20.line1).toBe(result20.UpperOuter);
+    expect(result20.line2).toBe(result20.UpperInner);
+    expect(result20.line3).toBe(result20.Middle);
+    expect(result20.line4).toBe(result20.LowerInner);
+    expect(result20.line5).toBe(result20.LowerOuter);
 
     // 21st candle
     const result21 = PluginLoader.safeUpdate(bb, createMockCandle(121));

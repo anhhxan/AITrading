@@ -20,6 +20,29 @@ export type SignalSide = 'LONG' | 'SHORT' | 'NONE';
 // ==========================================
 // 2. INDICATOR INTERFACE
 // ==========================================
+export interface IndicatorSnapshot {
+  ready: boolean;
+
+  line1: number | null;
+  line2: number | null;
+  line3: number | null;
+  line4: number | null;
+  line5: number | null;
+
+  UpperOuter?: number;
+  UpperInner?: number;
+  Middle?: number;
+  LowerInner?: number;
+  LowerOuter?: number;
+
+  Bandwidth?: number;
+  PercentB?: number;
+  stdev?: number;
+
+  error?: boolean;
+  crashMessage?: string;
+}
+
 export interface IIndicator {
   /** Name of the indicator plugin (e.g., 'BB_MB', 'HARSI') */
   readonly name: string;
@@ -34,10 +57,13 @@ export interface IIndicator {
   warmup(candles: Candle[]): void;
 
   /** Update with a new candle and return computed values snapshot */
-  update(candle: Candle): Record<string, any>;
+  update(candle: Candle): IndicatorSnapshot;
   
   /** Get the current snapshot of indicator values */
-  getSnapshot(): Record<string, any>;
+  getSnapshot(): IndicatorSnapshot;
+
+  /** Shutdown plugin */
+  shutdown(): void;
 }
 
 // ==========================================

@@ -25,6 +25,18 @@ export class PluginLoader {
   }
 
   /**
+   * Khởi tạo, cấu hình và kiểm tra hợp lệ Indicator.
+   */
+  public static loadAndInitializeIndicator(name: string, params: Record<string, any>): IIndicator {
+    const instance = this.loadIndicator(name);
+    instance.init(params);
+    if (!instance.validate()) {
+      throw new Error(`[PluginLoader] Indicator Plugin configuration invalid: ${name}`);
+    }
+    return instance;
+  }
+
+  /**
    * Warmup một Plugin với dữ liệu lịch sử
    */
   public static warmup(indicator: IIndicator, historicalCandles: Candle[]): void {
@@ -39,12 +51,21 @@ export class PluginLoader {
    * Cô lập (Isolation): Gọi update trong một sandbox an toàn
    * Đảm bảo một plugin bị lỗi không làm sập tiến trình chung của Engine.
    */
-  public static safeUpdate(indicator: IIndicator, candle: Candle): Record<string, any> {
+  public static safeUpdate(indicator: IIndicator, candle: Candle): any {
     try {
       return indicator.update(candle);
     } catch (error) {
       console.error(`[PluginLoader] FATAL: Indicator Plugin ${indicator.name} crashed during update!`, error);
-      return { ready: false, error: true, crashMessage: (error as Error).message };
+      return { 
+        ready: false, 
+        error: true, 
+        crashMessage: (error as Error).message,
+        line1: null,
+        line2: null,
+        line3: null,
+        line4: null,
+        line5: null
+      };
     }
   }
 

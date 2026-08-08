@@ -21,6 +21,7 @@ export class IndicatorEngine implements IEngine {
   private unsubscribe: (() => void) | null = null;
 
   public async initialize(): Promise<void> {
+    if (this.status === 'READY' || this.status === 'STARTING') return;
     this.status = 'STARTING';
     
     this.unsubscribe = coreEventBus.subscribe('CANDLE_CLOSED', async (event: CandleClosedEvent) => {
@@ -32,11 +33,17 @@ export class IndicatorEngine implements IEngine {
 
   public registerRobot(robotId: string, indicators: { name: string, params: any }[]) {
      const instances = indicators.map(ind => {
-        const instance = PluginLoader.loadIndicator(ind.name);
-        instance.init(ind.params);
-        return instance;
+        return PluginLoader.loadAndInitializeIndicator(ind.name, ind.params);
      });
      this.robotConfig.set(robotId, instances);
+  }
+
+  public warmupRobot(robotId: string, historicalCandles: Candle[]) {
+     const indicators = this.robotConfig.get(robotId);
+     if (!indicators) return;
+     for (const ind of indicators) {
+       PluginLoader.warmup(ind, historicalCandles);
+     }
   }
 
   private async handleCandleClosed(event: CandleClosedEvent) {
@@ -60,9 +67,9 @@ export class IndicatorEngine implements IEngine {
     if (allReady) {
        const trace = EventFactory.createTrace(
          event.trace.correlationId,
-         event.eventId,
+         event.eventId, // parentId = candle.eventId
          this.engineId,
-         event.trace.sequence
+         event.trace.sequence // sequence preservation
        );
 
        const nextEvent = EventFactory.createEvent(

@@ -8,10 +8,11 @@ class CrashPlugin implements IIndicator {
   init() {}
   validate() { return true; }
   warmup() {}
-  update(candle: Candle): Record<string, any> {
+  update(candle: Candle): any {
     throw new Error("I am a bad plugin");
   }
-  getSnapshot() { return {}; }
+  getSnapshot(): any { return {}; }
+  shutdown() {}
 }
 
 // Mock một Plugin tốt
@@ -20,10 +21,11 @@ class GoodPlugin implements IIndicator {
   init() {}
   validate() { return true; }
   warmup() {}
-  update(candle: Candle): Record<string, any> {
+  update(candle: Candle): any {
     return { ready: true, value: candle.close };
   }
-  getSnapshot() { return {}; }
+  getSnapshot(): any { return {}; }
+  shutdown() {}
 }
 
 describe('Phase 2: Plugin Isolation', () => {

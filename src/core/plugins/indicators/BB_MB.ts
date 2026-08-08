@@ -28,7 +28,7 @@ export class BB_MB_Indicator implements IIndicator {
     }
   }
 
-  public update(candle: Candle): Record<string, any> {
+  public update(candle: Candle): any {
     this.closeHistory.push(candle.close);
     
     // Maintain window size
@@ -39,9 +39,16 @@ export class BB_MB_Indicator implements IIndicator {
     return this.getSnapshot();
   }
 
-  public getSnapshot(): Record<string, any> {
+  public getSnapshot(): any {
     if (this.closeHistory.length < this.length) {
-      return { ready: false };
+      return { 
+        ready: false,
+        line1: null,
+        line2: null,
+        line3: null,
+        line4: null,
+        line5: null
+      };
     }
 
     // PineScript: basis = sma(src, length)
@@ -69,6 +76,11 @@ export class BB_MB_Indicator implements IIndicator {
 
     return {
       ready: true,
+      line1: UpperOuter,
+      line2: UpperInner,
+      line3: Middle,
+      line4: LowerInner,
+      line5: LowerOuter,
       UpperOuter,
       UpperInner,
       Middle,
@@ -78,5 +90,9 @@ export class BB_MB_Indicator implements IIndicator {
       PercentB,
       stdev
     };
+  }
+
+  public shutdown(): void {
+    this.closeHistory = [];
   }
 }

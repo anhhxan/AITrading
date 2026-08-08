@@ -15,7 +15,6 @@ async function run() {
 
     console.log('[1] Engine & Plugin Startup');
     const indicatorEngine = new IndicatorEngine();
-    await indicatorEngine.initialize();
     
     // Register Robot with BB_MB plugin
     indicatorEngine.registerRobot('ROBOT_PHASE2', [
@@ -31,11 +30,43 @@ async function run() {
     let firstReadyCandle = -1;
     let finalSnapshot: any = null;
 
+    let expectedNextSequence = 20;
+
     coreEventBus.subscribe('INDICATOR_UPDATED', async (e: any) => {
       emitCount++;
       if (firstReadyCandle === -1) {
         firstReadyCandle = e.trace.sequence;
       }
+      
+      // Strict Ordering & Sequence checking
+      if (e.trace.sequence !== expectedNextSequence) {
+        throw new Error(`Ordering failed! Expected sequence ${expectedNextSequence}, got ${e.trace.sequence}`);
+      }
+      expectedNextSequence++;
+
+      // Trace checking
+      if (!e.trace.parentId || !e.trace.correlationId) {
+        throw new Error(`Trace failed! Missing parentId or correlationId at sequence ${e.trace.sequence}`);
+      }
+      if (e.trace.correlationId !== 'run_p2') {
+         throw new Error(`Trace failed! Expected correlationId run_p2, got ${e.trace.correlationId}`);
+      }
+
+      // Line 1-5 checking
+      const snapshot = e.indicators['BB_MB'];
+      if (snapshot.line1 === undefined || snapshot.line2 === undefined || snapshot.line3 === undefined || snapshot.line4 === undefined || snapshot.line5 === undefined) {
+        throw new Error(`Line 1-5 Contract failed! Snapshot is missing lines at sequence ${e.trace.sequence}`);
+      }
+      if (
+        snapshot.line1 !== snapshot.UpperOuter || 
+        snapshot.line2 !== snapshot.UpperInner ||
+        snapshot.line3 !== snapshot.Middle ||
+        snapshot.line4 !== snapshot.LowerInner ||
+        snapshot.line5 !== snapshot.LowerOuter
+      ) {
+        throw new Error(`Line 1-5 Contract mapping failed at sequence ${e.trace.sequence}`);
+      }
+
       finalSnapshot = e.indicators;
     });
 

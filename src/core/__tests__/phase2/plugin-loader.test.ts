@@ -14,21 +14,15 @@ const createMockCandle = (price: number): Candle => ({
 describe('Phase 2: Plugin Loader Lifecycle', () => {
   it('Test A: Load and Validate BB_MB Plugin', () => {
     // Unknown plugin
-    expect(() => PluginLoader.loadIndicator('INVALID')).toThrow();
+    expect(() => PluginLoader.loadAndInitializeIndicator('INVALID', {})).toThrow();
 
     // Valid parameters
-    const bb1 = PluginLoader.loadIndicator('BB_MB');
-    bb1.init({ length: 20, mult: 2.0 });
+    const bb1 = PluginLoader.loadAndInitializeIndicator('BB_MB', { length: 20, mult: 2.0 });
     expect(bb1.validate()).toBe(true);
 
-    // Invalid parameters
-    const bb2 = PluginLoader.loadIndicator('BB_MB');
-    bb2.init({ length: -1 });
-    expect(bb2.validate()).toBe(false);
-
-    const bb3 = PluginLoader.loadIndicator('BB_MB');
-    bb3.init({ mult: 0 });
-    expect(bb3.validate()).toBe(false);
+    // Invalid parameters - should throw during initialization
+    expect(() => PluginLoader.loadAndInitializeIndicator('BB_MB', { length: -1 })).toThrow(/configuration invalid/);
+    expect(() => PluginLoader.loadAndInitializeIndicator('BB_MB', { mult: 0 })).toThrow(/configuration invalid/);
   });
 
   it('Test A2: Warmup via PluginLoader', () => {
