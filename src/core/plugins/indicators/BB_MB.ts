@@ -4,14 +4,15 @@ export class BB_MB_Indicator implements IIndicator {
   public readonly name = 'BB_MB';
   
   private length: number = 20;
+  private source: string = 'close';
   private mult1: number = 2.0; // Outer bands (Band 4, Band 1)
   private mult2: number = 1.0; // Inner bands (Band 5, Band 2)
   
-  private closeHistory: number[] = [];
-  private currentEma: number | null = null;
+  private valueHistory: number[] = [];
 
   public init(params: Record<string, any>): void {
     if (params.length !== undefined) this.length = params.length;
+    if (params.source !== undefined) this.source = params.source;
     if (params.mult !== undefined) this.mult1 = params.mult;
     if (params.mult2 !== undefined) this.mult2 = params.mult2;
   }
@@ -29,20 +30,29 @@ export class BB_MB_Indicator implements IIndicator {
   }
 
   public update(candle: Candle): any {
-    this.closeHistory.push(candle.close);
+    const val = (candle as any)[this.source] !== undefined ? (candle as any)[this.source] : candle.close;
+    this.valueHistory.push(val);
     
     // Maintain window size
-    if (this.closeHistory.length > this.length) {
-      this.closeHistory.shift();
+    if (this.valueHistory.length > this.length) {
+      this.valueHistory.shift();
     }
 
     return this.getSnapshot();
   }
 
   public getSnapshot(): any {
-    if (this.closeHistory.length < this.length) {
+    const config = {
+      length: this.length,
+      source: this.source,
+      mult: this.mult1,
+      mult2: this.mult2
+    };
+
+    if (this.valueHistory.length < this.length) {
       return { 
         ready: false,
+        config,
         line1: null,
         line2: null,
         line3: null,
@@ -52,12 +62,12 @@ export class BB_MB_Indicator implements IIndicator {
     }
 
     // PineScript: basis = sma(src, length)
-    const sum = this.closeHistory.reduce((a, b) => a + b, 0);
+    const sum = this.valueHistory.reduce((a, b) => a + b, 0);
     const basis = sum / this.length;
 
     // PineScript: dev = mult * stdev(src, length)
     // TradingView stdev divides by N (population stdev)
-    const squaredDiffs = this.closeHistory.map(price => Math.pow(price - basis, 2));
+    const squaredDiffs = this.valueHistory.map(price => Math.pow(price - basis, 2));
     const variance = squaredDiffs.reduce((a, b) => a + b, 0) / this.length;
     const stdev = Math.sqrt(variance);
 
@@ -71,11 +81,12 @@ export class BB_MB_Indicator implements IIndicator {
     const Bandwidth = ((UpperOuter - LowerOuter) / basis) * 100;
     
     // %B = (Current - Lower) / (Upper - Lower)
-    const lastClose = this.closeHistory[this.closeHistory.length - 1];
-    const PercentB = UpperOuter === LowerOuter ? 0 : (lastClose - LowerOuter) / (UpperOuter - LowerOuter);
+    const lastValue = this.valueHistory[this.valueHistory.length - 1];
+    const PercentB = UpperOuter === LowerOuter ? 0 : (lastValue - LowerOuter) / (UpperOuter - LowerOuter);
 
     return {
       ready: true,
+      config,
       line1: UpperOuter,
       line2: UpperInner,
       line3: Middle,
@@ -93,6 +104,6 @@ export class BB_MB_Indicator implements IIndicator {
   }
 
   public shutdown(): void {
-    this.closeHistory = [];
+    this.valueHistory = [];
   }
 }

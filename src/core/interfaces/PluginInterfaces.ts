@@ -41,6 +41,14 @@ export interface IndicatorSnapshot {
 
   error?: boolean;
   crashMessage?: string;
+
+  config?: {
+    length: number;
+    source: string;
+    mult: number;
+    mult2: number;
+    [key: string]: any;
+  };
 }
 
 export interface IIndicator {

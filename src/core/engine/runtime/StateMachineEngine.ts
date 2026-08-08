@@ -79,7 +79,7 @@ export class StateMachineEngine implements IEngine {
       if (count > maxTimeout) {
         this.states.set(robotId, RobotState.WAIT_SIGNAL);
         
-        const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence + 1);
+        const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
         const timeoutEvent = EventFactory.createEvent('ENTRY_TIMEOUT', robotId, trace, { reason: 'TIMEOUT' });
         await coreEventBus.publish(timeoutEvent as any);
         return;
@@ -99,7 +99,7 @@ export class StateMachineEngine implements IEngine {
       if (inZone) {
         this.states.set(robotId, RobotState.READY_TO_ENTER);
         
-        const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence + 1);
+        const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
         const enterEvent = EventFactory.createEvent('READY_TO_ENTER', robotId, trace, { 
           signalSide, entryPrice: currentPrice 
         });

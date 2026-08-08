@@ -58,7 +58,7 @@ export class StrategyEngine implements IEngine {
          event.trace.correlationId,
          event.eventId,
          this.engineId,
-         event.trace.sequence + 1
+         event.trace.sequence
        );
 
        const nextEvent = EventFactory.createEvent(
