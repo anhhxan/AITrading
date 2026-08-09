@@ -30,11 +30,11 @@ describe('Phase 3: Snapshot Lineage Regression', () => {
     let capturedSignal: any = null;
     let transitionEvent: any = null;
     
-    coreEventBus.subscribe('STRATEGY_SIGNAL_EVENT', (evt: any) => {
+    coreEventBus.subscribe('STRATEGY_SIGNAL_EVENT', async (evt: any) => {
       capturedSignal = evt;
     });
 
-    coreEventBus.subscribe('STATE_TRANSITION_EVENT', (evt: any) => {
+    coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (evt: any) => {
       if (evt.newState === 'READY_TO_ENTER') {
         transitionEvent = evt;
       }

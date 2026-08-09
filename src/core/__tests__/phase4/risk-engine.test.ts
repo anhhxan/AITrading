@@ -162,7 +162,7 @@ describe('Phase 4A: Risk Engine (TDD)', () => {
     await coreEventBus.waitForIdle('RobotMissing');
 
     expect(rejected).not.toBeNull();
-    expect(rejected.reason).toBe('MISSING_CONFIG');
+    expect((rejected as any).reason).toBe('MISSING_CONFIG');
   });
 
   it('T10: Wrong-side SL rejection', async () => {
@@ -186,7 +186,7 @@ describe('Phase 4A: Risk Engine (TDD)', () => {
   });
 
   it('T12: Missing snapshot rejection', async () => {
-    const signal = createSignal('LONG', 110, 100, 90);
+    const signal: any = createSignal('LONG', 110, 100, 90);
     delete signal.indicatorReference;
     const { rejected } = await sendFlow(signal, createReadyToEnter(95));
     expect(rejected).not.toBeNull();

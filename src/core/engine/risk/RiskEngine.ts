@@ -113,8 +113,8 @@ export class RiskEngine implements IEngine {
     const entry = event.triggerPrice;
     if (!entry || entry <= 0 || isNaN(entry)) return reject('INVALID_ENTRY');
 
-    let sl: number;
-    let tp: number;
+    let sl: number | null = null;
+    let tp: number | null = null;
 
     if (direction === 'LONG') {
       sl = indicatorRef.snapshot.line5;

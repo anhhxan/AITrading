@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { TradingViewAdapter } from '../core/adapters/tradingview/TradingViewAdapter';
@@ -52,13 +52,13 @@ async function bootstrap() {
     coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (e) => appendDump({ type: 'CORE_EVENT', eventType: 'STATE_TRANSITION_EVENT', processedAt: Date.now(), event: e }));
     coreEventBus.subscribe('TRADE_PLAN_EVENT', async (e) => appendDump({ type: 'CORE_EVENT', eventType: 'TRADE_PLAN_EVENT', processedAt: Date.now(), event: e }));
 
-    app.get('/health', (req, res) => {
+    app.get('/health', (req: Request, res: Response) => {
         res.status(200).json({ status: 'ok' });
     });
 
-    app.post('/webhook/tv/:robotId', async (req, res) => {
+    app.post('/webhook/tv/:robotId', async (req: Request, res: Response): Promise<any> => {
         const receivedAt = Date.now();
-        const robotId = req.params.robotId;
+        const robotId = req.params.robotId as string;
         const payload = req.body;
         
         let canonicalTimeframe = payload.timeframe;
@@ -84,9 +84,9 @@ async function bootstrap() {
             robotId,
             payload,
             headers: {
-                'user-agent': req.headers['user-agent'],
-                'content-type': req.headers['content-type'],
-                'x-forwarded-for': req.headers['x-forwarded-for']
+                'user-agent': req.headers['user-agent'] as string,
+                'content-type': req.headers['content-type'] as string,
+                'x-forwarded-for': req.headers['x-forwarded-for'] as string
             },
             validationResult,
             validationErrors,

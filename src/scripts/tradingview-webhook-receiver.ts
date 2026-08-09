@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { TradingViewAdapter, TradingViewPayload, ExpectedConfig } from '../core/adapters/tradingview/TradingViewAdapter';
 import { EngineOrchestrator } from '../core/engine/runtime/EngineOrchestrator';
 import { StrategyEngine } from '../core/engine/strategies/StrategyEngine';
@@ -12,8 +12,8 @@ app.use(express.json());
 export const adapter = new TradingViewAdapter();
 export const orchestrator = new EngineOrchestrator();
 
-app.post('/webhook/tv/:robotId', async (req, res) => {
-  const robotId = req.params.robotId;
+app.post('/webhook/tv/:robotId', async (req: Request, res: Response): Promise<any> => {
+  const robotId = req.params.robotId as string;
   const payload = req.body as TradingViewPayload;
 
   console.log(`\n[WEBHOOK] Received payload for ${robotId}`);

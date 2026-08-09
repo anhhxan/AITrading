@@ -17,8 +17,8 @@ async function test() {
   await engine.initialize();
   engine.registerRobotConfig(robotId, defaultRiskConfig);
 
-  coreEventBus.subscribe('TRADE_PLAN_EVENT', (e) => console.log('TRADE_PLAN:', e));
-  coreEventBus.subscribe('RISK_REJECTED_EVENT', (e) => console.log('RISK_REJECTED:', e));
+  coreEventBus.subscribe('TRADE_PLAN_EVENT', async (e) => { console.log('TRADE_PLAN:', e); });
+  coreEventBus.subscribe('RISK_REJECTED_EVENT', async (e) => { console.log('RISK_REJECTED:', e); });
 
   const signal = EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, EventFactory.createTrace(`corr-22`, 'ind-event', 'strat', 22), {
     direction: 'LONG',

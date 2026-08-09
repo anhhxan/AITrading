@@ -13,7 +13,7 @@ async function runSimulation() {
 
   // 3. Chuẩn bị hứng TRADE_PLAN
   let tradePlan: any = null;
-  coreEventBus.subscribe('TRADE_PLAN_EVENT', (e: any) => {
+  coreEventBus.subscribe('TRADE_PLAN_EVENT', async (e: any) => {
     tradePlan = e;
   });
 
