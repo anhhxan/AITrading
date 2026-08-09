@@ -4,7 +4,7 @@ import { StrategyEngine } from '@/core/engine/strategies/StrategyEngine';
 import { StateMachineEngine } from '@/core/engine/runtime/StateMachineEngine';
 import { RiskEngine } from '@/core/engine/risk/RiskEngine';
 import { coreEventBus } from '@/core/infrastructure/EventBus';
-import { supabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import crypto from 'crypto';
 
 let initialized = false;
@@ -81,7 +81,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     
     // Persist Audit Log
     try {
-        const { error: dbError } = await supabaseAdmin
+        const supabase = getSupabaseAdmin();
+        const { error: dbError } = await supabase
             .from('tradingview_webhook_logs')
             .insert({
                 robot_id: robotId,
