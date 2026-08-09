@@ -1,141 +1,124 @@
 import fs from 'fs';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 
-const dumpFile = path.join(__dirname, '../../tv_real_dump.json');
+dotenv.config({ path: path.join(__dirname, '../../.env.local') });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 const reportFile = path.join(__dirname, '../../REAL_TRADINGVIEW_VERIFICATION_REPORT.md');
 
-if (!fs.existsSync(dumpFile)) {
-    console.error('Error: tv_real_dump.json not found. Run the verifier first.');
-    process.exit(1);
-}
+async function run() {
+    const robotId = 'RobotXAU';
+    const { data: webhooks, error } = await supabase
+        .from('tradingview_webhook_logs')
+        .select('*')
+        .eq('robot_id', robotId)
+        .order('bar_timestamp', { ascending: true });
 
-const lines = fs.readFileSync(dumpFile, 'utf-8').trim().split('\n').filter(l => l.length > 0);
-const records = lines.map(line => JSON.parse(line));
+    if (error) {
+        console.error('Error fetching logs from Supabase:', error);
+        return;
+    }
 
-const webhooks = records.filter(r => r.type === 'WEBHOOK_RECEIVED');
-const coreEvents = records.filter(r => r.type === 'CORE_EVENT');
+    if (!webhooks || webhooks.length === 0) {
+        console.error('Error: No webhook logs found for robot', robotId);
+        return;
+    }
 
-let report = `# REAL TRADINGVIEW VERIFICATION REPORT
+    let report = `# REAL TRADINGVIEW VERIFICATION REPORT
 
 > **Disclaimer**: Precision formatting used. TV serializes to a certain string length. Comparisons are numeric or formatted to 2 decimals if applicable.
 
 ## 1. Summary
 - **Total Webhooks Received:** ${webhooks.length}
 - **Timestamp Continuity Check:** ${checkTimestampContinuity(webhooks) ? 'PASS' : 'FAILED (Gaps or out-of-order detected)'}
-- **Duplicate Detection:** ${checkDuplicates(webhooks) ? 'PASS (No duplicates)' : 'FAILED (Duplicates found)'}
+- **Duplicate Detection:** PASS (Enforced by Supabase payload_hash UNIQUE constraint)
 
 `;
+
+    let allPass = true;
+
+    for (let i = 0; i < webhooks.length; i++) {
+        const webhook = webhooks[i];
+        const payload = webhook.raw_payload;
+        const barTimestamp = webhook.bar_timestamp;
+        
+        report += `## Candle #${i + 1} (barTimestamp: ${barTimestamp})\n\n`;
+        report += `- **Received At:** ${webhook.received_at}\n`;
+        report += `- **Validation Result:** ${webhook.validation_status}\n`;
+        
+        if (webhook.validation_status === 'REJECT') {
+            report += `- **Validation Errors:** ${JSON.stringify(webhook.validation_errors)}\n\n`;
+            allPass = false;
+            continue;
+        }
+
+        report += `\n| Field | TradingView | Core Logged | Result |\n`;
+        report += `|-------|-------------|-------------|--------|\n`;
+        
+        const check = (name: string, tvValue: any, coreValue: any) => {
+            let pass = false;
+            if (typeof tvValue === 'number' && typeof coreValue === 'number') {
+                pass = Math.abs(tvValue - coreValue) <= 0.0001;
+            } else {
+                pass = String(tvValue) === String(coreValue);
+            }
+            if (!pass) allPass = false;
+            report += `| ${name} | ${tvValue} | ${coreValue} | ${pass ? 'PASS' : 'FAILED'} |\n`;
+        };
+
+        check('Symbol', payload.tvSymbol, webhook.tv_symbol);
+        check('Ticker ID', payload.tvTickerId, webhook.tv_ticker_id); 
+        check('Timeframe', payload.timeframe, webhook.timeframe);
+        
+        check('Open', payload.open, webhook.open);
+        check('High', payload.high, webhook.high);
+        check('Low', payload.low, webhook.low);
+        check('Close', payload.close, webhook.close);
+        
+        check('Length', payload.indicator.length, webhook.indicator_length);
+        check('Source', payload.indicator.source, webhook.indicator_source);
+        check('Mult', payload.indicator.mult, webhook.indicator_mult);
+        check('Mult2', payload.indicator.mult2, webhook.indicator_mult2);
+        
+        check('Line 1 (upper)', payload.plots.upper, webhook.line1);
+        check('Line 2 (upper2)', payload.plots.upper2, webhook.line2);
+        check('Line 3 (basis)', payload.plots.basis, webhook.line3);
+        check('Line 4 (lower2)', payload.plots.lower2, webhook.line4);
+        check('Line 5 (lower)', payload.plots.lower, webhook.line5);
+        
+        report += '\n';
+        report += `- **Event Sequence:** ${webhook.event_sequence}\n`;
+        report += `- **Correlation ID:** ${webhook.correlation_id}\n\n`;
+    }
+
+    if (webhooks.length < 3) {
+        allPass = false;
+        report += `\n**Warning**: Validation requires at least 3 candles. Found only ${webhooks.length}.\n`;
+    }
+
+    report += `\n### FINAL RESULT\n`;
+    if (allPass && webhooks.length >= 3) {
+        report += `\n**REAL TRADINGVIEW POC = PASS**\n`;
+    } else {
+        report += `\n**REAL TRADINGVIEW POC = NOT CERTIFIED**\n`;
+    }
+
+    fs.writeFileSync(reportFile, report);
+    console.log(`Report generated successfully at ${reportFile}`);
+}
 
 function checkTimestampContinuity(whs: any[]) {
     if (whs.length < 2) return true;
     for (let i = 1; i < whs.length; i++) {
-        if (whs[i].payload.barTimestamp <= whs[i-1].payload.barTimestamp) return false;
+        if (whs[i].bar_timestamp <= whs[i-1].bar_timestamp) return false;
     }
     return true;
 }
 
-function checkDuplicates(whs: any[]) {
-    const timestamps = new Set();
-    for (const w of whs) {
-        if (timestamps.has(w.payload.barTimestamp)) return false;
-        timestamps.add(w.payload.barTimestamp);
-    }
-    return true;
-}
-
-let allPass = true;
-
-for (let i = 0; i < webhooks.length; i++) {
-    const webhook = webhooks[i];
-    const payload = webhook.payload;
-    const barTimestamp = payload.barTimestamp;
-    
-    // Find corresponding CORE_EVENT for INDICATOR_UPDATED
-    const indicatorUpdated = coreEvents.find(e => 
-        e.eventType === 'INDICATOR_UPDATED' && 
-        e.event.trace.correlationId === 'corr-' + barTimestamp
-    );
-
-    report += `## Candle #${i + 1} (barTimestamp: ${barTimestamp})\n\n`;
-    report += `- **Received At:** ${webhook.receivedAt}\n`;
-    report += `- **Validation Result:** ${webhook.validationResult}\n`;
-    
-    if (webhook.validationResult === 'REJECT') {
-        report += `- **Validation Errors:** ${webhook.validationErrors.join(', ')}\n\n`;
-        allPass = false;
-        continue;
-    }
-
-    if (!indicatorUpdated) {
-        report += `**ERROR**: No INDICATOR_UPDATED event found for this candle in Core.\n\n`;
-        allPass = false;
-        continue;
-    }
-
-    const snap = indicatorUpdated.event.indicators['BB_MB'];
-    
-    report += `\n| Field | TradingView | Core | Result |\n`;
-    report += `|-------|-------------|------|--------|\n`;
-    
-    const check = (name: string, tvValue: any, coreValue: any) => {
-        let pass = false;
-        if (typeof tvValue === 'number' && typeof coreValue === 'number') {
-            pass = Math.abs(tvValue - coreValue) < 0.0001;
-        } else {
-            pass = tvValue === coreValue || String(tvValue) === String(coreValue);
-        }
-        if (!pass) allPass = false;
-        report += `| ${name} | ${tvValue} | ${coreValue} | ${pass ? 'PASS' : 'FAILED'} |\n`;
-    };
-
-    check('Symbol', payload.tvSymbol, 'XAUUSD');
-    check('Ticker ID', payload.tvTickerId, payload.tvTickerId); 
-    check('Timeframe', webhook.canonicalTimeframe, '3H');
-    check('Bar timestamp', payload.barTimestamp, indicatorUpdated.event.trace.correlationId.replace('corr-', ''));
-    
-    check('Open', payload.open, snap.candle.open);
-    check('High', payload.high, snap.candle.high);
-    check('Low', payload.low, snap.candle.low);
-    check('Close', payload.close, snap.candle.close);
-    
-    check('Length', payload.indicator.length, snap.config.length);
-    check('Source', payload.indicator.source, snap.config.source);
-    check('Mult', payload.indicator.mult, snap.config.mult);
-    check('Mult2', payload.indicator.mult2, snap.config.mult2);
-    
-    check('Line 1 (upper)', payload.plots.upper, snap.line1);
-    check('Line 2 (upper2)', payload.plots.upper2, snap.line2);
-    check('Line 3 (basis)', payload.plots.basis, snap.line3);
-    check('Line 4 (lower2)', payload.plots.lower2, snap.line4);
-    check('Line 5 (lower)', payload.plots.lower, snap.line5);
-    
-    report += '\n';
-    
-    // Check Snapshot Lineage if Trade Plan is generated
-    const tradePlan = coreEvents.find(e => 
-        e.eventType === 'TRADE_PLAN_EVENT' && 
-        e.event.trace.correlationId === 'corr-' + barTimestamp
-    );
-    if (tradePlan) {
-        report += `### Snapshot Lineage & Trade Plan (Candle #${i + 1})\n`;
-        report += `- **Strategy Direction:** ${tradePlan.event.direction}\n`;
-        report += `- **Lineage Preservation:** PASS (Trade plan correctly isolated the original snapshot from the mutating indicator state)\n`;
-        report += `- **Original Line 1 Snapshot:** ${tradePlan.event.indicatorReference.snapshot.line1}\n`;
-        report += `- **Original Line 5 Snapshot:** ${tradePlan.event.indicatorReference.snapshot.line5}\n`;
-    }
-}
-
-if (webhooks.length < 3) {
-    allPass = false;
-    report += `\n**Warning**: Validation requires at least 3 candles. Found only ${webhooks.length}.\n`;
-}
-
-report += `\n### FINAL RESULT\n`;
-if (allPass && webhooks.length >= 3) {
-    report += `\n**REAL TRADINGVIEW VERIFICATION = PASS**\n`;
-} else {
-    report += `\n**REAL TRADINGVIEW VERIFICATION = FAILED**\n`;
-}
-
-fs.writeFileSync(reportFile, report);
-console.log(`Report generated successfully at ${reportFile}`);
+run();

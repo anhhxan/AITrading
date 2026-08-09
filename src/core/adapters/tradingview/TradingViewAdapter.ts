@@ -2,6 +2,18 @@ import { coreEventBus } from '../../infrastructure/EventBus';
 import { EventFactory } from '../../infrastructure/EventFactory';
 import { randomUUID } from 'crypto';
 
+export interface AdapterResult {
+  accepted: boolean;
+  validationErrors: string[];
+  correlationId?: string;
+  events?: {
+    eventType: string;
+    eventId: string;
+    sequence: number;
+    eventInstance?: any;
+  }[];
+}
+
 export interface TradingViewPayload {
   tvSymbol: string;
   tvTickerId: string;
@@ -58,12 +70,12 @@ export class TradingViewAdapter {
     return tvTimeframe;
   }
 
-  // Xử lý Payload từ Webhook
-  public async handleWebhook(payload: TradingViewPayload, robotId: string): Promise<boolean> {
+
+  public async handleWebhook(payload: TradingViewPayload, robotId: string): Promise<AdapterResult> {
     const expectedConfig = this.configs.get(robotId);
     if (!expectedConfig) {
       console.error(`[TradingViewAdapter] REJECT: No expected config found for robot ${robotId}`);
-      return false;
+      return { accepted: false, validationErrors: ['MISSING_CONFIG'] };
     }
 
     // VALIDATION GATE
@@ -79,7 +91,7 @@ export class TradingViewAdapter {
 
     if (validationErrors.length > 0) {
       console.error(`[TradingViewAdapter] VALIDATION REJECTED:`, validationErrors);
-      return false; // STOP, KHÔNG CHẠY STRATEGY
+      return { accepted: false, validationErrors }; // STOP, KHÔNG CHẠY STRATEGY
     }
 
     // CANONICAL MAPPING
@@ -99,12 +111,13 @@ export class TradingViewAdapter {
     };
 
     let seq = this.sequences.get(robotId) || 1;
+    const correlationId = 'corr-' + payload.barTimestamp;
     
     // Tạo Event INDICATOR_UPDATED_EVENT tương đương với kết quả của IndicatorEngine
-    const trace1 = EventFactory.createTrace('corr-' + payload.barTimestamp, 'webhook-' + randomUUID(), 'TradingViewAdapter', seq++);
+    const trace1 = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewAdapter', seq++);
     const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', robotId, trace1, { candle });
     
-    const trace2 = EventFactory.createTrace('corr-' + payload.barTimestamp, candleEvent.eventId, 'TradingViewAdapter', seq++);
+    const trace2 = EventFactory.createTrace(correlationId, candleEvent.eventId, 'TradingViewAdapter', seq++);
     const indicatorUpdatedEvent = EventFactory.createEvent('INDICATOR_UPDATED', robotId, trace2, {
       indicators: {
         'BB_MB': {
@@ -115,13 +128,28 @@ export class TradingViewAdapter {
       }
     });
 
-    console.log(`[TradingViewAdapter] Validation PASS. Emitting CANDLE_CLOSED and INDICATOR_UPDATED_EVENT for ${robotId}.`);
-    
-    // Đảm bảo StateMachine nhận được nến để check trigger, và Strategy nhận được indicator
-    await coreEventBus.publish(candleEvent);
-    await coreEventBus.publish(indicatorUpdatedEvent);
+    console.log(`[TradingViewAdapter] Validation PASS. Generated CANDLE_CLOSED and INDICATOR_UPDATED_EVENT for ${robotId}.`);
     
     this.sequences.set(robotId, seq);
-    return true;
+    
+    return {
+      accepted: true,
+      validationErrors: [],
+      correlationId,
+      events: [
+        {
+          eventType: 'CANDLE_CLOSED',
+          eventId: candleEvent.eventId,
+          sequence: candleEvent.trace.sequence,
+          eventInstance: candleEvent
+        },
+        {
+          eventType: 'INDICATOR_UPDATED',
+          eventId: indicatorUpdatedEvent.eventId,
+          sequence: indicatorUpdatedEvent.trace.sequence,
+          eventInstance: indicatorUpdatedEvent
+        }
+      ]
+    };
   }
 }

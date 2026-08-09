@@ -4,141 +4,142 @@ import { StrategyEngine } from '@/core/engine/strategies/StrategyEngine';
 import { StateMachineEngine } from '@/core/engine/runtime/StateMachineEngine';
 import { RiskEngine } from '@/core/engine/risk/RiskEngine';
 import { coreEventBus } from '@/core/infrastructure/EventBus';
-import { store } from '@/lib/verifier-store';
+import { supabaseAdmin } from '@/lib/supabase';
+import crypto from 'crypto';
 
 let initialized = false;
 const strategyEngine = new StrategyEngine();
 const stateMachineEngine = new StateMachineEngine();
 const riskEngine = new RiskEngine();
-const adapter = new TradingViewAdapter();
 
-const expectedConfig = {
-    canonicalSymbol: 'XAUUSD',
-    timeframe: '3H', 
-    indicator: {
-        name: 'BB_MB',
-        length: 20,
-        source: 'close',
-        mult: 2.5,
-        mult2: 1.3
-    }
-};
-
-async function ensureInitialized() {
+// SERVERLESS STATE WARNING: 
+// POC sequence is process-local and is NOT production distributed sequencing.
+// Core runtime state persistence across independent Vercel invocations is OUT OF SCOPE for this REAL DATA FIDELITY POC.
+async function ensureInitialized(robotId: string) {
     if (initialized) return;
-    
     await strategyEngine.initialize();
     await stateMachineEngine.initialize();
     await riskEngine.initialize();
     
-    adapter.registerConfig('RobotXAU', expectedConfig);
-
-    strategyEngine.registerRobot('RobotXAU', 'BB_Strategy', { retracementZonePercent: 20, timeoutCandles: 3 });
-    stateMachineEngine.registerRobot('RobotXAU');
-    riskEngine.registerRobotConfig('RobotXAU', { symbol: 'XAUUSD', accountBalance: 10000, riskPercent: 2, maxAllocationPercent: 50, leverage: 1 });
-
-    coreEventBus.subscribe('CANDLE_CLOSED', async (e) => { store.dumps.push({ type: 'CORE_EVENT', eventType: 'CANDLE_CLOSED', processedAt: Date.now(), event: e }); });
-    coreEventBus.subscribe('INDICATOR_UPDATED', async (e) => { store.dumps.push({ type: 'CORE_EVENT', eventType: 'INDICATOR_UPDATED', processedAt: Date.now(), event: e }); });
-    coreEventBus.subscribe('STRATEGY_SIGNAL_EVENT', async (e) => { store.dumps.push({ type: 'CORE_EVENT', eventType: 'STRATEGY_SIGNAL_EVENT', processedAt: Date.now(), event: e }); });
-    coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (e) => { store.dumps.push({ type: 'CORE_EVENT', eventType: 'STATE_TRANSITION_EVENT', processedAt: Date.now(), event: e }); });
-    coreEventBus.subscribe('TRADE_PLAN_EVENT', async (e) => { store.dumps.push({ type: 'CORE_EVENT', eventType: 'TRADE_PLAN_EVENT', processedAt: Date.now(), event: e }); });
-
+    strategyEngine.registerRobot(robotId, 'BB_Strategy', { retracementZonePercent: 20, timeoutCandles: 3 });
+    stateMachineEngine.registerRobot(robotId);
+    riskEngine.registerRobotConfig(robotId, { symbol: 'XAUUSD', accountBalance: 10000, riskPercent: 2, maxAllocationPercent: 50, leverage: 1 });
+    
     initialized = true;
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ robotId: string }> | { robotId: string } }) {
-    await ensureInitialized();
+    const receivedAt = new Date().toISOString();
     
-    const receivedAt = Date.now();
     // Resolve params for Next.js 15+ compatibility
     const resolvedParams = await params;
     const robotId = resolvedParams.robotId;
     
+    let rawPayloadStr = '';
     let payload;
     try {
-        payload = await req.json();
+        rawPayloadStr = await req.text();
+        payload = JSON.parse(rawPayloadStr);
     } catch(e) {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
     
-    let canonicalTimeframe = payload.timeframe;
-    if (payload.timeframe === '60') canonicalTimeframe = '1H';
-    if (payload.timeframe === '120') canonicalTimeframe = '2H';
-    if (payload.timeframe === '180') canonicalTimeframe = '3H';
-    if (payload.timeframe === '240') canonicalTimeframe = '4H';
+    // Tính hash để đảm bảo idempotency (Ngăn duplicate từ TradingView retries)
+    // Hash tính trực tiếp từ raw JSON nhận được, trước khi mutate.
+    const payloadHash = crypto.createHash('sha256').update(rawPayloadStr).digest('hex');
 
-    const validationErrors: string[] = [];
-    if (payload.tvSymbol !== expectedConfig.canonicalSymbol) validationErrors.push('Symbol mismatch');
-    if (canonicalTimeframe !== expectedConfig.timeframe) validationErrors.push('Timeframe mismatch');
-    if (payload.indicator?.length !== expectedConfig.indicator.length) validationErrors.push('Length mismatch');
-    if (payload.indicator?.source !== expectedConfig.indicator.source) validationErrors.push('Source mismatch');
-    if (payload.indicator?.mult !== expectedConfig.indicator.mult) validationErrors.push('Mult mismatch');
-    if (payload.indicator?.mult2 !== expectedConfig.indicator.mult2) validationErrors.push('Mult2 mismatch');
+    await ensureInitialized(robotId);
 
-    const validationResult = validationErrors.length === 0 ? 'PASS' : 'REJECT';
-
-    // 1. Log Raw Payload to Memory Store
-    store.dumps.push({
-        type: 'WEBHOOK_RECEIVED',
-        receivedAt: new Date(receivedAt).toISOString(),
-        robotId,
-        payload,
-        headers: {
-            'user-agent': req.headers.get('user-agent'),
-            'content-type': req.headers.get('content-type'),
-            'x-forwarded-for': req.headers.get('x-forwarded-for')
-        },
-        validationResult,
-        validationErrors,
-        canonicalSymbol: expectedConfig.canonicalSymbol,
-        canonicalTimeframe,
-        barTimestamp: payload.barTimestamp,
-        OHLC: {
-            open: payload.open,
-            high: payload.high,
-            low: payload.low,
-            close: payload.close
-        },
-        volume: payload.volume,
-        indicator: payload.indicator,
-        lines: {
-            line1: payload.plots?.upper,
-            line2: payload.plots?.upper2,
-            line3: payload.plots?.basis,
-            line4: payload.plots?.lower2,
-            line5: payload.plots?.lower
-        }
-    });
+    // Khởi tạo Adapter
+    const adapter = new TradingViewAdapter();
     
-    // 2. Console Output for Vercel Logs
-    console.log(`\n[REAL TV WEBHOOK]`);
-    console.log(`Robot:\n${robotId}\n`);
-    console.log(`Symbol:\n${expectedConfig.canonicalSymbol}\n`);
-    console.log(`Ticker:\n${payload.tvTickerId || payload.tvSymbol}\n`);
-    console.log(`Timeframe:\n${payload.timeframe} -> ${canonicalTimeframe}\n`);
-    console.log(`BarTimestamp:\n${payload.barTimestamp}\n`);
-    console.log(`OHLC:\nO: ${payload.open}\nH: ${payload.high}\nL: ${payload.low}\nC: ${payload.close}\n`);
-    console.log(`Indicator:\nLength: ${payload.indicator?.length}\nSource: ${payload.indicator?.source}\nMult: ${payload.indicator?.mult}\nMult2: ${payload.indicator?.mult2}\n`);
-    console.log(`Line 1: ${payload.plots?.upper}`);
-    console.log(`Line 2: ${payload.plots?.upper2}`);
-    console.log(`Line 3: ${payload.plots?.basis}`);
-    console.log(`Line 4: ${payload.plots?.lower2}`);
-    console.log(`Line 5: ${payload.plots?.lower}\n`);
-    console.log(`Validation:\n${validationResult}\n`);
+    // Expected Config Load
+    const expectedConfig = {
+        canonicalSymbol: 'XAUUSD',
+        timeframe: '1m', // Thực tế theo chart
+        indicator: {
+            name: 'BB_MB',
+            length: 20,
+            source: 'close',
+            mult: 2.5,
+            mult2: 1.3
+        }
+    };
+    
+    adapter.registerConfig(robotId, expectedConfig);
 
-    if (validationResult === 'REJECT') {
-        return NextResponse.json({ status: 'REJECT', errors: validationErrors }, { status: 400 });
+    // Validation Gate
+    const adapterResult = await adapter.handleWebhook(payload, robotId);
+    
+    const correlationId = adapterResult.correlationId || null;
+    let eventSequence: number | null = null;
+    if (adapterResult.events && adapterResult.events.length > 0) {
+        eventSequence = Math.max(...adapterResult.events.map(e => e.sequence));
     }
 
+    const validationStatus = adapterResult.accepted ? 'PASS' : 'REJECT';
+    
+    // Persist Audit Log
     try {
-        const success = await adapter.handleWebhook(payload, robotId);
-        if (success) {
-            return NextResponse.json({ status: 'OK' }, { status: 200 });
-        } else {
-            return NextResponse.json({ status: 'Adapter Validation Failed' }, { status: 400 });
+        const { error: dbError } = await supabaseAdmin
+            .from('tradingview_webhook_logs')
+            .insert({
+                robot_id: robotId,
+                received_at: receivedAt,
+                bar_timestamp: payload.barTimestamp || 0,
+                tv_symbol: payload.tvSymbol || '',
+                tv_ticker_id: payload.tvTickerId || '',
+                timeframe: payload.timeframe || '',
+                open: payload.open || 0,
+                high: payload.high || 0,
+                low: payload.low || 0,
+                close: payload.close || 0,
+                volume: payload.volume || 0,
+                indicator_length: payload.indicator?.length || null,
+                indicator_source: payload.indicator?.source || null,
+                indicator_mult: payload.indicator?.mult || null,
+                indicator_mult2: payload.indicator?.mult2 || null,
+                line1: payload.plots?.upper || null,
+                line2: payload.plots?.upper2 || null,
+                line3: payload.plots?.basis || null,
+                line4: payload.plots?.lower2 || null,
+                line5: payload.plots?.lower || null,
+                validation_status: validationStatus,
+                validation_errors: adapterResult.validationErrors,
+                correlation_id: correlationId,
+                event_sequence: eventSequence,
+                payload_hash: payloadHash,
+                raw_payload: payload
+            });
+            
+        if (dbError) {
+            // Duplicate Webhook detected (Idempotency Triggered)
+            if (dbError.code === '23505') {
+                console.log(`[REAL TV WEBHOOK] Idempotent drop: duplicate payload_hash ${payloadHash}`);
+                // Trả về 200 OK để TradingView không retry nữa. KHÔNG publish events.
+                return NextResponse.json({ status: 'OK', message: 'Duplicate acknowledged' }, { status: 200 });
+            }
+            console.error('[REAL TV WEBHOOK] DB Error:', dbError);
+            throw dbError;
         }
     } catch (e: any) {
-        console.error('[VERIFIER] Error handling webhook', e);
-        return NextResponse.json({ status: 'Internal Error' }, { status: 500 });
+        console.error('[REAL TV WEBHOOK] Supabase Insert Error:', e);
+        return NextResponse.json({ error: 'Database audit failed' }, { status: 500 });
     }
+
+    // IF REJECT: STOP, No Core Event, HTTP 400
+    if (!adapterResult.accepted) {
+        return NextResponse.json({ status: 'REJECT', errors: adapterResult.validationErrors }, { status: 400 });
+    }
+
+    // IF PASS: Publish events
+    if (adapterResult.events) {
+        for (const evt of adapterResult.events) {
+            if (evt.eventInstance) {
+                await coreEventBus.publish(evt.eventInstance);
+            }
+        }
+    }
+
+    return NextResponse.json({ status: 'OK', events: adapterResult.events?.map(e => ({ eventType: e.eventType, sequence: e.sequence })) }, { status: 200 });
 }

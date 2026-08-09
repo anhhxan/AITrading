@@ -5,7 +5,7 @@
 
 -- 1. TRADING ROBOTS (Digital Employees)
 CREATE TABLE robots (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     status VARCHAR(50) DEFAULT 'CREATED', -- CREATED, CONFIGURED, READY, RUNNING, PAUSED, STOPPED, ERROR, ARCHIVED
     timeframe VARCHAR(10) NOT NULL, -- e.g., 3H
@@ -32,7 +32,7 @@ CREATE TABLE robots (
 
 -- 2. ROBOT SNAPSHOTS (Audit & AI Optimization)
 CREATE TABLE robot_snapshots (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     robot_id UUID NOT NULL REFERENCES robots(id) ON DELETE CASCADE,
     strategy_version VARCHAR(50) NOT NULL,
     
@@ -47,7 +47,7 @@ CREATE TABLE robot_snapshots (
 
 -- 3. TRADE HISTORY
 CREATE TABLE trade_history (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     robot_id UUID NOT NULL REFERENCES robots(id) ON DELETE CASCADE,
     
     action VARCHAR(20) NOT NULL, -- BUY, SELL, CLOSE
@@ -69,7 +69,7 @@ CREATE TABLE trade_history (
 
 -- 4. SEGREGATED LOGS
 CREATE TABLE logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     robot_id UUID REFERENCES robots(id) ON DELETE CASCADE,
     category VARCHAR(50) NOT NULL, -- SYSTEM, TRADING, EXECUTION, RISK, AUDIT
     level VARCHAR(20) NOT NULL DEFAULT 'INFO', -- INFO, WARN, ERROR, DEBUG
@@ -80,7 +80,7 @@ CREATE TABLE logs (
 
 -- 5. TRADING ACCOUNTS
 CREATE TABLE trading_accounts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     provider VARCHAR(50) NOT NULL,
     api_key VARCHAR(255),
@@ -93,3 +93,48 @@ CREATE TABLE trading_accounts (
 CREATE INDEX idx_logs_robot_id ON logs(robot_id);
 CREATE INDEX idx_trade_history_robot_id ON trade_history(robot_id);
 CREATE INDEX idx_snapshots_robot_id ON robot_snapshots(robot_id);
+
+-- 6. TRADINGVIEW WEBHOOK LOGS (Audit & Idempotency)
+CREATE TABLE tradingview_webhook_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    robot_id VARCHAR(50) NOT NULL,
+    received_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    bar_timestamp BIGINT NOT NULL,
+
+    tv_symbol VARCHAR(50) NOT NULL,
+    tv_ticker_id VARCHAR(100),
+    timeframe VARCHAR(10) NOT NULL,
+
+    open DECIMAL NOT NULL,
+    high DECIMAL NOT NULL,
+    low DECIMAL NOT NULL,
+    close DECIMAL NOT NULL,
+    volume DECIMAL,
+
+    indicator_length INT,
+    indicator_source VARCHAR(50),
+    indicator_mult DECIMAL,
+    indicator_mult2 DECIMAL,
+
+    line1 DECIMAL,
+    line2 DECIMAL,
+    line3 DECIMAL,
+    line4 DECIMAL,
+    line5 DECIMAL,
+
+    validation_status VARCHAR(20) NOT NULL, -- PASS / REJECT
+    validation_errors JSONB,
+
+    correlation_id VARCHAR(100),
+    event_sequence BIGINT,
+
+    payload_hash TEXT NOT NULL,
+    raw_payload JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+
+    UNIQUE(robot_id, bar_timestamp, payload_hash)
+);
+
+CREATE INDEX idx_tv_logs_robot_id ON tradingview_webhook_logs(robot_id);
+CREATE INDEX idx_tv_logs_bar_timestamp ON tradingview_webhook_logs(bar_timestamp);
+CREATE INDEX idx_tv_logs_created_at ON tradingview_webhook_logs(created_at);
