@@ -1,6 +1,7 @@
 import { coreEventBus } from '../../infrastructure/EventBus';
 import { EventFactory } from '../../infrastructure/EventFactory';
 import { randomUUID } from 'crypto';
+import { getSupabaseAdmin } from '../../../lib/supabase';
 
 export interface AdapterResult {
   accepted: boolean;
@@ -72,7 +73,42 @@ export class TradingViewAdapter {
 
 
   public async handleWebhook(payload: TradingViewPayload, robotId: string): Promise<AdapterResult> {
-    const expectedConfig = this.configs.get(robotId);
+    let expectedConfig = this.configs.get(robotId);
+    let activeVersion = 1;
+
+    // Fetch ACTIVE config from DB if not provided in memory (for tests)
+    if (!expectedConfig) {
+      try {
+        const supabase = getSupabaseAdmin();
+        const { data, error } = await supabase
+          .from('robot_configs')
+          .select('version, indicator_profile, robots!inner(trading_view_symbol, timeframe)')
+          .eq('robot_id', robotId)
+          .eq('status', 'ACTIVE')
+          .single();
+
+        if (error || !data) {
+          console.error(`[TradingViewAdapter] REJECT: No ACTIVE config found in DB for robot ${robotId}`, error);
+          return { accepted: false, validationErrors: ['MISSING_CONFIG'] };
+        }
+
+        activeVersion = data.version;
+        expectedConfig = {
+          canonicalSymbol: data.robots.trading_view_symbol,
+          timeframe: data.robots.timeframe,
+          indicator: {
+            length: data.indicator_profile.length,
+            source: data.indicator_profile.source,
+            mult: data.indicator_profile.mult,
+            mult2: data.indicator_profile.mult2,
+          }
+        };
+      } catch (e) {
+        console.error(`[TradingViewAdapter] DB ERROR:`, e);
+        return { accepted: false, validationErrors: ['DB_ERROR'] };
+      }
+    }
+
     if (!expectedConfig) {
       console.error(`[TradingViewAdapter] REJECT: No expected config found for robot ${robotId}`);
       return { accepted: false, validationErrors: ['MISSING_CONFIG'] };
@@ -115,10 +151,10 @@ export class TradingViewAdapter {
     
     // Tạo Event INDICATOR_UPDATED_EVENT tương đương với kết quả của IndicatorEngine
     const trace1 = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewAdapter', seq++);
-    const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', robotId, trace1, { candle });
+    const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', robotId, activeVersion, trace1, { candle });
     
     const trace2 = EventFactory.createTrace(correlationId, candleEvent.eventId, 'TradingViewAdapter', seq++);
-    const indicatorUpdatedEvent = EventFactory.createEvent('INDICATOR_UPDATED', robotId, trace2, {
+    const indicatorUpdatedEvent = EventFactory.createEvent('INDICATOR_UPDATED', robotId, activeVersion, trace2, {
       indicators: {
         'BB_MB': {
           ready: true,

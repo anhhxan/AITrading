@@ -24,7 +24,7 @@ describe('Phase 1 Foundation Correction: CQRS Write Boundary', () => {
     await projection.initialize();
 
     const trace = EventFactory.createTrace('c1', 'root', 'Engine', 1);
-    const event = EventFactory.createEvent('STATE_TRANSITION_EVENT', 'R-123', trace, {
+    const event = EventFactory.createEvent('STATE_TRANSITION_EVENT', 'R-123', 1 /* configVersion */, trace, {
       oldState: 'WAIT_SIGNAL',
       newState: 'READY_TO_ENTER'
     });

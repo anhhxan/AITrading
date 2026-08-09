@@ -2,6 +2,7 @@ import { BaseEvent, EventFactory } from "../../infrastructure/EventFactory";
 import { coreEventBus } from "../../infrastructure/EventBus";
 import { IEngine } from "./IEngine";
 import { StrategySignalEvent } from "../strategies/StrategyEngine";
+import { getSupabaseAdmin } from "../../../lib/supabase";
 
 export enum RobotState {
   WAIT_SIGNAL = 'WAIT_SIGNAL',
@@ -56,6 +57,7 @@ export class StateMachineEngine implements IEngine {
       this.states.set(robotId, RobotState.WAIT_RETRACEMENT);
       this.activeSignals.set(robotId, event);
       this.timeoutCounts.set(robotId, 0); // Reset timeout
+      await this.persistState(robotId, RobotState.WAIT_RETRACEMENT);
     }
   }
 
@@ -78,6 +80,7 @@ export class StateMachineEngine implements IEngine {
 
       if (isTriggered) {
         this.states.set(robotId, RobotState.READY_TO_ENTER);
+        await this.persistState(robotId, RobotState.READY_TO_ENTER);
         
         const trace = EventFactory.createTrace(
           activeSignal.trace.correlationId, // Preserve original correlationId
@@ -88,7 +91,7 @@ export class StateMachineEngine implements IEngine {
 
         const transitionEvent = EventFactory.createEvent(
           'STATE_TRANSITION_EVENT', 
-          robotId, 
+          robotId, event.configVersion || 1, 
           trace, 
           { 
             previousState: RobotState.WAIT_RETRACEMENT,
@@ -109,6 +112,7 @@ export class StateMachineEngine implements IEngine {
 
       if (count > maxTimeout) {
         this.states.set(robotId, RobotState.WAIT_SIGNAL);
+        await this.persistState(robotId, RobotState.WAIT_SIGNAL);
         
         const trace = EventFactory.createTrace(
           activeSignal.trace.correlationId,
@@ -119,7 +123,7 @@ export class StateMachineEngine implements IEngine {
         
         const transitionEvent = EventFactory.createEvent(
           'STATE_TRANSITION_EVENT', 
-          robotId, 
+          robotId, event.configVersion || 1, 
           trace, 
           { 
             previousState: RobotState.WAIT_RETRACEMENT,
@@ -134,6 +138,30 @@ export class StateMachineEngine implements IEngine {
 
   public getState(robotId: string): RobotState | undefined {
     return this.states.get(robotId);
+  }
+
+  private async persistState(robotId: string, state: RobotState) {
+    try {
+      const supabase = getSupabaseAdmin();
+      // Try to update using name OR id safely. If robotId is not UUID, id = robotId will fail, but we catch it.
+      let { error } = await supabase.from('robots').update({ 
+        current_state: state, 
+        current_state_updated_at: new Date().toISOString() 
+      }).eq('id', robotId);
+      
+      if (error && error.code === '22P02') { // invalid UUID
+        error = (await supabase.from('robots').update({ 
+          current_state: state, 
+          current_state_updated_at: new Date().toISOString() 
+        }).eq('name', robotId)).error;
+      }
+      
+      if (error) {
+        console.error(`[StateMachineEngine] Persistence ERROR for ${robotId}:`, error);
+      }
+    } catch (err) {
+      console.error(`[StateMachineEngine] Persistence EXCEPTION for ${robotId}:`, err);
+    }
   }
 
   public healthCheck(): any { return { status: this.status }; }

@@ -83,7 +83,7 @@ async function run() {
         volume: 1000
       };
       
-      const evt = EventFactory.createEvent('CANDLE_CLOSED', 'ROBOT_PHASE2', trace, { candle });
+      const evt = EventFactory.createEvent('CANDLE_CLOSED', 'ROBOT_PHASE2', 1 /* configVersion */, trace, { candle });
       await coreEventBus.publish(evt);
     }
 

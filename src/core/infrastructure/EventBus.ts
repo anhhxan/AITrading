@@ -1,5 +1,6 @@
 import { BaseEvent } from "./EventFactory";
 import { coreIdempotencyStore } from "./IdempotencyStore";
+import { getSupabaseAdmin } from "../../lib/supabase";
 
 export type EventHandler<T extends BaseEvent> = (event: T) => Promise<void>;
 
@@ -143,6 +144,26 @@ export class EventBus {
           coreIdempotencyStore.remove(event.idempotencyKey);
           coreIdempotencyStore.remove(event.eventId);
         }
+      }
+
+      // Persistence Layer - Awaited for Vercel Serverless safety but isolated from Core failures
+      try {
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from('core_events').insert({
+          robot_id: event.robotId,
+          event_id: event.eventId,
+          event_type: event.eventType,
+          correlation_id: event.trace.correlationId,
+          parent_id: event.trace.parentId,
+          event_sequence: event.trace.sequence,
+          payload: event,
+          timestamp: event.timestamp
+        });
+        if (error) {
+          console.error(`[EventBus] Persistence ERROR for event ${event.eventType} (seq: ${event.trace.sequence}):`, error);
+        }
+      } catch (err) {
+        console.error(`[EventBus] Persistence EXCEPTION for event ${event.eventType} (seq: ${event.trace.sequence}):`, err);
       }
     }
 

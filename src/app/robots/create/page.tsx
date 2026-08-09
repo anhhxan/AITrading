@@ -1,284 +1,266 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, ArrowRight, CheckCircle2, Rocket, AlertTriangle } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, Save, ShieldAlert, Zap, Server, Activity } from 'lucide-react';
+import Link from 'next/link';
 
-export default function RobotWizard() {
-  const router = useRouter()
-  const [step, setStep] = useState(1)
-  const totalSteps = 6
+export default function CreateRobotPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    slug: '',
+    timeframe: '1m',
+    signal_source: 'TradingView',
+    execution_symbol: 'XAUUSD',
+    provider: 'Binance',
+    
+    // TradingView config
+    tvLength: 20,
+    tvSource: 'close',
+    tvMult: 2.5,
+    tvMult2: 1.3
+  });
 
-  const nextStep = () => setStep((s) => Math.min(s + 1, totalSteps))
-  const prevStep = () => setStep((s) => Math.max(s - 1, 1))
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    
+    // Auto-generate slug if name changes and slug hasn't been manually touched (simplified)
+    if (name === 'name' && !formData.slug) {
+       setFormData(prev => ({
+         ...prev,
+         slug: value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 50)
+       }));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const payload = {
+        name: formData.name,
+        slug: formData.slug,
+        timeframe: formData.timeframe,
+        signal_source: formData.signal_source,
+        trading_view_symbol: formData.execution_symbol,
+        execution_symbol: formData.execution_symbol,
+        provider: formData.provider,
+        indicator_profile: {
+          name: 'BB_MB',
+          length: Number(formData.tvLength),
+          source: formData.tvSource,
+          mult: Number(formData.tvMult),
+          mult2: Number(formData.tvMult2)
+          // Mapping is injected by API schema
+        }
+      };
+
+      const res = await fetch('/api/robots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to create robot');
+      }
+
+      router.push('/robots');
+    } catch (err: any) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-8 w-full max-w-3xl mx-auto">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Tạo Robot Mới</h2>
-        <p className="text-muted-foreground mt-2">
-          Thiết lập Robot giao dịch tự động của bạn qua 6 bước đơn giản.
-        </p>
+    <div className="max-w-4xl mx-auto flex flex-col space-y-6">
+      <div className="flex items-center gap-4">
+        <Link href="/robots" className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+          <ArrowLeft size={20} className="text-slate-500" />
+        </Link>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Create New Robot</h2>
+          <p className="text-sm text-slate-500 mt-1">Configure a new digital trading employee.</p>
+        </div>
       </div>
 
-      {/* Progress Bar */}
-      <div className="flex items-center justify-between w-full mb-4 relative">
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-muted z-0 rounded-full"></div>
-        <div 
-          className="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-primary z-0 rounded-full transition-all duration-300" 
-          style={{ width: `${((step - 1) / (totalSteps - 1)) * 100}%` }}
-        ></div>
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-3">
+          <ShieldAlert size={20} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-8">
         
-        {Array.from({ length: totalSteps }).map((_, i) => (
-          <div 
-            key={i} 
-            className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full border-2 bg-background transition-colors
-              ${step > i + 1 ? 'border-primary bg-primary text-primary-foreground' : 
-                step === i + 1 ? 'border-primary text-primary' : 'border-muted text-muted-foreground'}`}
-          >
-            {step > i + 1 ? <CheckCircle2 className="w-5 h-5" /> : (i + 1)}
+        {/* Basic Info */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-4 mb-4">
+            <Zap size={20} className="text-blue-500" />
+            <h3 className="font-semibold text-slate-800 text-lg">Basic Information</h3>
           </div>
-        ))}
-      </div>
-
-      <Card className="min-h-[400px] flex flex-col">
-        <CardHeader>
-          <CardTitle>
-            {step === 1 && "Bước 1: Tên & Nhận diện"}
-            {step === 2 && "Bước 2: Sàn giao dịch & Tài khoản"}
-            {step === 3 && "Bước 3: Tài sản & Khung thời gian"}
-            {step === 4 && "Bước 4: Chiến lược (Strategy & Indicator)"}
-            {step === 5 && "Bước 5: Quản trị Rủi ro (Risk & Exit)"}
-            {step === 6 && "Bước 6: Xác nhận & Khởi tạo"}
-          </CardTitle>
-          <CardDescription>
-            {step === 1 && "Đặt tên cho Robot để dễ dàng quản lý sau này."}
-            {step === 6 && "Kiểm tra lại toàn bộ thông tin trước khi triển khai."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex-1">
-          {step === 1 && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Tên Robot</Label>
-                <Input id="name" placeholder="Ví dụ: BTC Swing H3" />
-              </div>
-            </div>
-          )}
           
-          {step === 2 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Market Data Provider</Label>
-                  <Select defaultValue="binance_futures">
-                    <SelectTrigger><SelectValue placeholder="Nguồn cấp dữ liệu" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="binance_futures">Binance Futures Data</SelectItem>
-                      <SelectItem value="binance_spot">Binance Spot Data</SelectItem>
-                      <SelectItem value="bybit">Bybit Data</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Execution Provider</Label>
-                  <Select defaultValue="paper">
-                    <SelectTrigger><SelectValue placeholder="Sàn giao dịch/Khớp lệnh" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="paper">Paper Trading Engine</SelectItem>
-                      <SelectItem value="binance_testnet">Binance Testnet</SelectItem>
-                      <SelectItem value="binance_live">Binance Live</SelectItem>
-                      <SelectItem value="mt5">MT5 Exness</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2 border-t pt-4">
-                <Label>Trading Session (Lịch giao dịch)</Label>
-                <Select defaultValue="247">
-                  <SelectTrigger><SelectValue placeholder="Chọn Session" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="247">24/7 (Crypto - BTC/ETH)</SelectItem>
-                    <SelectItem value="london">London Session (Vàng/Forex)</SelectItem>
-                    <SelectItem value="london_ny">London + New York (Forex)</SelectItem>
-                    <SelectItem value="custom">Custom Schedule</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Robot Name</label>
+              <input 
+                required
+                type="text" 
+                name="name"
+                value={formData.name}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                placeholder="e.g. Gold Scalper Alpha"
+              />
             </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-              <div className="space-y-2">
-                <Label>Cặp giao dịch (Symbol)</Label>
-                <Input placeholder="Ví dụ: BTCUSDT" defaultValue="BTCUSDT" />
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Webhook Slug (Unique ID)</label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm pointer-events-none">/tv/</span>
+                <input 
+                  required
+                  type="text" 
+                  name="slug"
+                  value={formData.slug}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
+                  placeholder="RobotXAU"
+                />
               </div>
-              <div className="space-y-2">
-                <Label>Khung thời gian (Timeframe)</Label>
-                <Select defaultValue="3H">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn Khung thời gian" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="15m">15 Minutes</SelectItem>
-                    <SelectItem value="1H">1 Hour</SelectItem>
-                    <SelectItem value="3H">3 Hours</SelectItem>
-                    <SelectItem value="1D">1 Day</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <p className="text-xs text-slate-500">This slug will be used in your TradingView webhook URL.</p>
             </div>
-          )}
+          </div>
+        </div>
 
-          {step === 4 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <div className="space-y-2 border-b pb-4">
-                <Label className="text-lg">Chiến lược</Label>
-                <Select defaultValue="bb_strategy">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Chọn Chiến lược" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bb_strategy">Breakout & Retracement (BB_Strategy)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-4">
-                <Label className="text-lg">Chỉ báo (Indicator Params)</Label>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs">Length</Label>
-                    <Input type="number" defaultValue={20} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Mult1 (Inner)</Label>
-                    <Input type="number" step="0.1" defaultValue={1.0} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Mult2 (Outer)</Label>
-                    <Input type="number" step="0.1" defaultValue={2.0} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 5 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <div className="space-y-4">
-                <Label className="text-lg">Quản trị Vốn (Risk Allocation)</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs">Loại Risk</Label>
-                    <Select defaultValue="risk_percent">
-                      <SelectTrigger><SelectValue placeholder="Chọn loại Risk" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="risk_percent">Risk % (Theo Balance)</SelectItem>
-                        <SelectItem value="fixed_usdt">Fixed USDT (Tiền cố định)</SelectItem>
-                        <SelectItem value="lot">Fixed Lot</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Giá trị Risk (%)</Label>
-                    <Input type="number" defaultValue={2} />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-4 border-t pt-4">
-                <Label className="text-lg">Chiến lược Thoát lệnh (Exit Strategy)</Label>
-                <Select defaultValue="strategy">
-                  <SelectTrigger><SelectValue placeholder="Phương pháp Exit" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="strategy">Theo Indicator/Strategy (Khuyên dùng)</SelectItem>
-                    <SelectItem value="atr">ATR Trailing Stop</SelectItem>
-                    <SelectItem value="fixed">Fixed TP/SL Ratio</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* MỚI: Risk Preview */}
-              <div className="mt-4 p-4 bg-muted/50 border rounded-lg space-y-2 text-sm">
-                <Label className="font-bold flex items-center gap-2 mb-2">
-                  <AlertTriangle className="w-4 h-4 text-orange-500" />
-                  Risk Calculation Preview (Simulated)
-                </Label>
-                <div className="grid grid-cols-2 gap-y-2 font-mono">
-                  <div><span className="text-muted-foreground">Balance:</span> 1,000 USDT</div>
-                  <div><span className="text-muted-foreground">Risk Target:</span> 20 USDT (2%)</div>
-                  <div><span className="text-muted-foreground">Leverage:</span> x10</div>
-                  <div><span className="text-muted-foreground">Entry Price:</span> 118,000</div>
-                  <div><span className="text-muted-foreground">SL Trigger:</span> 117,000</div>
-                  <div><span className="text-muted-foreground">TP Trigger:</span> 121,000</div>
-                  <div className="col-span-2 border-t my-1"></div>
-                  <div className="text-blue-600 font-bold"><span className="text-muted-foreground">Position Size:</span> 0.020 BTC</div>
-                  <div className="text-orange-600 font-bold"><span className="text-muted-foreground">Margin Used:</span> ~236 USDT</div>
-                  <div className="text-red-600 col-span-2"><span className="text-muted-foreground">Est. Liquidation:</span> ~107,380</div>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {step === 6 && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-right-4 bg-muted/30 p-4 rounded-lg">
-              <h3 className="font-bold border-b pb-2 mb-2">Trading Summary</h3>
-              <div className="grid grid-cols-2 gap-y-3 text-sm">
-                <div className="text-muted-foreground">Tên Robot:</div>
-                <div className="font-medium text-foreground">BTC Swing H3</div>
-                
-                <div className="text-muted-foreground">Provider / Env:</div>
-                <div className="font-medium">Paper Trading (Demo Acc 1)</div>
-                
-                <div className="text-muted-foreground">Tài sản / Khung giờ:</div>
-                <div className="font-medium">BTCUSDT • 3H</div>
-                
-                <div className="text-muted-foreground">Chiến lược lõi:</div>
-                <div className="font-medium text-blue-600">BB_Strategy + BB_MB</div>
-                
-                <div className="text-muted-foreground">Tham số:</div>
-                <div className="font-medium">Length = 20, Mult = 2</div>
-                
-                <div className="text-muted-foreground">Risk Allocation:</div>
-                <div className="font-medium text-red-500">Risk 2% Balance</div>
-                
-                <div className="text-muted-foreground">Exit Strategy:</div>
-                <div className="font-medium">Thoát theo Strategy Limit</div>
-              </div>
-              <div className="mt-4 p-3 border border-blue-500/30 bg-blue-500/5 rounded flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                <p className="text-sm text-blue-800 dark:text-blue-300">
-                  TradingView chỉ dùng để <strong>tham chiếu cấu hình</strong>. Toàn bộ tín hiệu sẽ do Core Engine (BB_MB) tính toán sau khi khởi tạo.
-                </p>
-              </div>
-            </div>
-          )}
-
-        </CardContent>
-        <CardFooter className="flex justify-between border-t p-6">
-          <Button variant="outline" onClick={prevStep} disabled={step === 1}>
-            <ArrowLeft className="w-4 h-4 mr-2" /> Quay lại
-          </Button>
+        {/* Integration */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-4 mb-4">
+            <Server size={20} className="text-indigo-500" />
+            <h3 className="font-semibold text-slate-800 text-lg">Integrations & Symbol</h3>
+          </div>
           
-          {step < totalSteps ? (
-            <Button onClick={nextStep}>
-              Tiếp tục <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          ) : (
-            <Button className="bg-green-600 hover:bg-green-700" onClick={() => router.push('/robots')}>
-              Khởi tạo Robot <CheckCircle2 className="w-4 h-4 ml-2" />
-            </Button>
-          )}
-        </CardFooter>
-      </Card>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Signal Source</label>
+              <select 
+                name="signal_source"
+                value={formData.signal_source}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+              >
+                <option value="TradingView">TradingView</option>
+              </select>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Execution Provider</label>
+              <select 
+                name="provider"
+                value={formData.provider}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+              >
+                <option value="Binance">Binance</option>
+                <option value="Exness">Exness</option>
+                <option value="OKX">OKX</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Execution Symbol</label>
+              <input 
+                required
+                type="text" 
+                name="execution_symbol"
+                value={formData.execution_symbol}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-mono uppercase"
+                placeholder="XAUUSD"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* TradingView Configuration */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex items-center gap-2 border-b border-slate-100 pb-4 mb-4">
+            <Activity size={20} className="text-emerald-500" />
+            <h3 className="font-semibold text-slate-800 text-lg">TradingView Configuration (BB+MB)</h3>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Timeframe</label>
+              <input type="text" name="timeframe" value={formData.timeframe} onChange={handleInputChange} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Length</label>
+              <input type="number" name="tvLength" value={formData.tvLength} onChange={handleInputChange} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Source</label>
+              <input type="text" name="tvSource" value={formData.tvSource} onChange={handleInputChange} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Mult</label>
+              <input type="number" step="0.1" name="tvMult" value={formData.tvMult} onChange={handleInputChange} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Mult2</label>
+              <input type="number" step="0.1" name="tvMult2" value={formData.tvMult2} onChange={handleInputChange} className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+            </div>
+          </div>
+
+          <div className="mt-6 bg-slate-50 p-4 rounded-lg border border-slate-200">
+            <h4 className="text-sm font-semibold text-slate-700 mb-3">Canonical Line Mapping (Read-Only)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              {['upper', 'upper2', 'basis', 'lower2', 'lower'].map((mapVal, i) => (
+                <div key={i} className="flex flex-col">
+                  <span className="text-xs text-slate-500 mb-1">Plot {i+1}</span>
+                  <div className="bg-slate-200 px-3 py-2 rounded-md text-sm font-mono text-slate-600 text-center cursor-not-allowed border border-slate-300">
+                    {mapVal}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-3 flex gap-2">
+              <ShieldAlert size={14} />
+              Mapping is strictly immutable and enforced by Data Contract V1 to ensure determinism.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-4">
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 bg-blue-600 text-white hover:bg-blue-700 h-10 px-8 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                Creating...
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <Save size={16} />
+                Create Robot
+              </span>
+            )}
+          </button>
+        </div>
+      </form>
     </div>
-  )
+  );
 }

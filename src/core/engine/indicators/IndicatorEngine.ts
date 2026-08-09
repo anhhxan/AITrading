@@ -74,7 +74,7 @@ export class IndicatorEngine implements IEngine {
 
        const nextEvent = EventFactory.createEvent(
          'INDICATOR_UPDATED',
-         robotId,
+         robotId, event.configVersion,
          trace,
          { indicators: snapshotResult }
        );

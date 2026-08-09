@@ -8,7 +8,7 @@ import { Candle, IIndicator } from '../../interfaces/PluginInterfaces';
 const createMockCandleEvent = (sequence: number, robotId: string = 'ROBOT_E'): any => {
   const trace = EventFactory.createTrace('c', 'root', 'Market', sequence);
   const candle: Candle = { timestamp: Date.now(), open: 100, high: 100, low: 100, close: 100, volume: 100 };
-  return EventFactory.createEvent('CANDLE_CLOSED', robotId, trace, { candle });
+  return EventFactory.createEvent('CANDLE_CLOSED', robotId, 1 /* configVersion */, trace, { candle });
 };
 
 describe('Phase 2: IndicatorEngine Contract', () => {
@@ -132,7 +132,7 @@ describe('Phase 2: IndicatorEngine Contract', () => {
     for (let i = 1; i <= 10; i++) {
       const trace = EventFactory.createTrace('c', 'root', 'Market', i);
       const candle: Candle = { timestamp: Date.now(), open: 100, high: 100, low: 100, close: 100, volume: 100 };
-      const evt = EventFactory.createEvent('CANDLE_CLOSED', 'ROBOT_H', trace, { candle });
+      const evt = EventFactory.createEvent('CANDLE_CLOSED', 'ROBOT_H', 1 /* configVersion */, trace, { candle });
       await coreEventBus.publish(evt as any);
     }
 

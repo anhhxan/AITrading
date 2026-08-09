@@ -3,6 +3,7 @@ import { BaseEvent, EventFactory } from '../../infrastructure/EventFactory';
 import { coreEventBus } from '../../infrastructure/EventBus';
 import { StrategySignalEvent } from '../strategies/StrategyEngine';
 import { StateTransitionEvent, RobotState } from '../runtime/StateMachineEngine';
+import { calculateRiskPreview } from './RiskCalculator';
 
 export interface TradePlanEvent extends BaseEvent {
   robotId: string;
@@ -88,7 +89,7 @@ export class RiskEngine implements IEngine {
         this.engineId,
         event.trace.sequence
       );
-      const rejEvent = EventFactory.createEvent('RISK_REJECTED_EVENT', robotId, trace, { reason, details });
+      const rejEvent = EventFactory.createEvent('RISK_REJECTED_EVENT', robotId, event.configVersion || 1, trace, { reason, details });
       await coreEventBus.publish(rejEvent as any);
     };
 
@@ -111,7 +112,6 @@ export class RiskEngine implements IEngine {
     if (direction !== 'LONG' && direction !== 'SHORT') return reject('INVALID_DIRECTION');
 
     const entry = event.triggerPrice;
-    if (!entry || entry <= 0 || isNaN(entry)) return reject('INVALID_ENTRY');
 
     let sl: number | null = null;
     let tp: number | null = null;
@@ -124,37 +124,24 @@ export class RiskEngine implements IEngine {
       tp = indicatorRef.snapshot.line3;
     }
 
-    if (!sl || sl <= 0 || isNaN(sl)) return reject('INVALID_SL');
-    if (!tp || tp <= 0 || isNaN(tp)) return reject('INVALID_TP');
+    const result = calculateRiskPreview({
+      accountBalance: config.accountBalance,
+      direction: direction as 'LONG' | 'SHORT',
+      entryReferencePrice: entry,
+      stopLoss: sl,
+      takeProfit: tp,
+      riskPercent: config.riskPercent,
+      maxAllocationPercent: config.maxAllocationPercent,
+      leverage: config.leverage
+    });
 
-    let risk: number;
-    let reward: number;
-
-    if (direction === 'LONG') {
-      risk = entry - sl;
-      reward = tp - entry;
-    } else {
-      risk = sl - entry;
-      reward = entry - tp;
+    if (result.decision === 'RISK_REJECTED') {
+      return reject(result.reason || 'REJECTED');
     }
 
-    if (risk <= 0 || reward <= 0) return reject('INVALID_RISK_REWARD');
-
-    const riskAmount = config.accountBalance * config.riskPercent;
-    let positionSize = riskAmount / risk;
-
-    if (!positionSize || positionSize <= 0 || !isFinite(positionSize) || isNaN(positionSize)) {
-      return reject('INVALID_POSITION_SIZE');
-    }
-
-    const maxNotional = config.accountBalance * config.maxAllocationPercent;
-    const notional = positionSize * entry;
-
-    if (notional > maxNotional) {
-      positionSize = maxNotional / entry;
-    }
-
-    const rr = reward / risk;
+    const positionSize = result.positionSize;
+    const riskAmount = result.riskAmount;
+    const rr = result.riskRewardRatio;
 
     const trace = EventFactory.createTrace(
       activeSignal.trace.correlationId,
@@ -163,7 +150,7 @@ export class RiskEngine implements IEngine {
       event.trace.sequence
     );
 
-    const tradePlan = EventFactory.createEvent('TRADE_PLAN_EVENT', robotId, trace, {
+    const tradePlan = EventFactory.createEvent('TRADE_PLAN_EVENT', robotId, 1, trace, {
       strategyId: activeSignal.strategyId,
       strategyVersion: activeSignal.strategyVersion,
       symbol: config.symbol,

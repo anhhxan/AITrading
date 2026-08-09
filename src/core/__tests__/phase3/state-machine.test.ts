@@ -29,29 +29,29 @@ describe('Phase 3: State Machine Transition', () => {
     const createSeqTrace = () => EventFactory.createTrace('t', 'p', 'e', seq++);
 
     // Kích hoạt SIGNAL
-    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotSM', createSeqTrace(), {
+    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotSM', 1 /* configVersion */, createSeqTrace(), {
       direction: 'LONG', maxTimeoutCandles: 2, entryTrigger: { type: 'RETRACEMENT_ZONE', lower: 90, upper: 92 }
     }) as any);
     await coreEventBus.waitForIdle('RobotSM');
     expect(engine.getState('RobotSM')).toBe(RobotState.WAIT_RETRACEMENT);
 
     // Đẩy Indicator (Indicator ko còn được dùng trực tiếp bởi StateMachine nữa, nhưng giữ để khớp Event Pipeline)
-    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotSM', createSeqTrace(), {
+    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotSM', 1 /* configVersion */, createSeqTrace(), {
         indicators: { BB_MB: { band4: 100, band5: 90 } }
     }) as any);
-    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', createSeqTrace(), {
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', 1 /* configVersion */, createSeqTrace(), {
       candle: { close: 105 } // Giá vẫn ở 105, không hồi về zone [90, 92]
     }) as any);
     await coreEventBus.waitForIdle('RobotSM');
 
     // Đẩy nến 2
-    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', createSeqTrace(), {
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', 1 /* configVersion */, createSeqTrace(), {
       candle: { close: 106 }
     }) as any);
     await coreEventBus.waitForIdle('RobotSM');
 
     // Đẩy nến 3 -> Quá timeout (đặt maxTimeout = 2)
-    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', createSeqTrace(), {
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', 1 /* configVersion */, createSeqTrace(), {
       candle: { close: 107 }
     }) as any);
     await coreEventBus.waitForIdle('RobotSM');
@@ -70,17 +70,17 @@ describe('Phase 3: State Machine Transition', () => {
     const createSeqTrace = () => EventFactory.createTrace('t', 'p', 'e', seq++);
 
     // Kích hoạt SIGNAL
-    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotSM', createSeqTrace(), {
+    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotSM', 1 /* configVersion */, createSeqTrace(), {
       direction: 'LONG', maxTimeoutCandles: 2, entryTrigger: { type: 'RETRACEMENT_ZONE', lower: 90, upper: 92 }
     }) as any);
     
     // Đẩy Indicator
-    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotSM', createSeqTrace(), {
+    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotSM', 1 /* configVersion */, createSeqTrace(), {
         indicators: { BB_MB: { band4: 100, band5: 90 } } // Zone: 90 đến 92 (20% của 10)
     }) as any);
 
     // Đẩy nến giá rớt xuống 91 (nằm trong Retracement Zone [90, 92])
-    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', createSeqTrace(), {
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotSM', 1 /* configVersion */, createSeqTrace(), {
       candle: { close: 91 }
     }) as any);
     

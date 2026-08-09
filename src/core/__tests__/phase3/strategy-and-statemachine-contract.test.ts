@@ -26,7 +26,7 @@ describe('Phase 3 Contract: State Machine Rules', () => {
 
   const createSignal = (direction: 'LONG' | 'SHORT' | 'NONE', correlationId: string, entryTrigger: any = null, sequence: number = 100): StrategySignalEvent => {
     const trace = EventFactory.createTrace(correlationId, `signal-${correlationId}`, 'StrategyEngine', sequence);
-    return EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'test-robot', trace, {
+    return EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'test-robot', 1 /* configVersion */, trace, {
       direction,
       maxTimeoutCandles: 3,
       entryTrigger,
@@ -37,7 +37,7 @@ describe('Phase 3 Contract: State Machine Rules', () => {
 
   const createCandle = (sequence: number, price: number) => {
     const trace = EventFactory.createTrace(`corr-${sequence}`, `parent-${sequence}`, 'MarketData', sequence);
-    return EventFactory.createEvent('CANDLE_CLOSED', 'test-robot', trace, {
+    return EventFactory.createEvent('CANDLE_CLOSED', 'test-robot', 1 /* configVersion */, trace, {
       candle: { close: price, timestamp: Date.now(), open: price, high: price, low: price, volume: 100 }
     });
   };

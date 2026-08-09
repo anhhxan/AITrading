@@ -1,123 +1,168 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Activity, CirclePlay, TrendingUp, Zap, ServerCrash, PauseCircle, Clock } from "lucide-react"
+'use client';
 
-export default function DashboardOverview() {
+import { useEffect, useState } from 'react';
+import { Activity, Bot, TrendingUp, AlertTriangle } from 'lucide-react';
+
+type DashboardData = {
+  totalRobots: number;
+  runningRobots: number;
+  openPositionsCount: number;
+  realizedPnL: number;
+  recentLogs: any[];
+};
+
+export default function DashboardPage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetch('/api/dashboard')
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch dashboard data');
+        return res.json();
+      })
+      .then(d => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch(e => {
+        setError(e.message);
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col space-y-6">
+        <h2 className="text-2xl font-bold text-slate-800">System Overview</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="h-32 bg-slate-200 animate-pulse rounded-xl border border-slate-100 shadow-sm" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+        <AlertTriangle className="h-6 w-6" />
+        <div>
+          <h3 className="font-semibold">Error Loading Dashboard</h3>
+          <p className="text-sm">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-8 w-full max-w-6xl mx-auto">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <p className="text-muted-foreground mt-2">
-          Tổng quan trạng thái hoạt động của hệ thống AI Trading.
-        </p>
+    <div className="flex flex-col space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold text-slate-800">System Overview</h2>
       </div>
 
-      {/* Thống kê chung */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Robot Running</CardTitle>
-            <CirclePlay className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">5</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Paper Position</CardTitle>
-            <Activity className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">2</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today's PnL</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">+125 USDT</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today's Signals</CardTitle>
-            <Zap className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">14</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">System Health</CardTitle>
-            <ServerCrash className="h-4 w-4 text-muted-foreground hidden" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-              </span>
-              <span className="text-green-500 text-lg">Healthy</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Total Robots */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <span className="text-sm font-medium text-slate-500 uppercase">Total Robots</span>
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+              <Bot className="h-5 w-5" />
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Danh sách Robot hoạt động */}
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>Trading Robots</CardTitle>
-          <CardDescription>Danh sách trạng thái các Robot hiện tại.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            
-            <div className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-              <div className="flex items-center gap-4">
-                <CirclePlay className="h-5 w-5 text-green-500" />
-                <div>
-                  <p className="text-sm font-medium leading-none">BTC Swing H3</p>
-                  <p className="text-sm text-muted-foreground mt-1">Binance Paper (BTCUSDT)</p>
-                </div>
-              </div>
-              <Badge variant="outline" className="text-green-500 border-green-500/20 bg-green-500/10">
-                🟢 Running
-              </Badge>
-            </div>
-
-            <div className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-              <div className="flex items-center gap-4">
-                <PauseCircle className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium leading-none">Gold Trend</p>
-                  <p className="text-sm text-muted-foreground mt-1">MT5 Paper (XAUUSD)</p>
-                </div>
-              </div>
-              <Badge variant="outline" className="text-muted-foreground">
-                ⚪ Stopped
-              </Badge>
-            </div>
-
-            <div className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-              <div className="flex items-center gap-4">
-                <Clock className="h-5 w-5 text-yellow-500" />
-                <div>
-                  <p className="text-sm font-medium leading-none">BTC Test</p>
-                  <p className="text-sm text-muted-foreground mt-1">Binance Testnet (BTCUSDT)</p>
-                </div>
-              </div>
-              <Badge variant="outline" className="text-yellow-600 border-yellow-500/20 bg-yellow-500/10">
-                🟡 Waiting Signal
-              </Badge>
-            </div>
-
           </div>
-        </CardContent>
-      </Card>
+          <div className="mt-4">
+            <span className="text-3xl font-bold text-slate-800">{data.totalRobots > 0 ? data.totalRobots : '0'}</span>
+            {data.totalRobots === 0 && <p className="text-xs text-slate-400 mt-1">NO ROBOTS</p>}
+          </div>
+        </div>
+
+        {/* Running Robots */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <span className="text-sm font-medium text-slate-500 uppercase">Running</span>
+            <div className="p-2 bg-green-50 text-green-600 rounded-lg">
+              <Activity className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <span className="text-3xl font-bold text-slate-800">{data.runningRobots > 0 ? data.runningRobots : '0'}</span>
+          </div>
+        </div>
+
+        {/* Active Positions */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <span className="text-sm font-medium text-slate-500 uppercase">Active Positions</span>
+            <div className="p-2 bg-orange-50 text-orange-600 rounded-lg">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <span className="text-3xl font-bold text-slate-800">{data.openPositionsCount > 0 ? data.openPositionsCount : '0'}</span>
+            {data.openPositionsCount === 0 && <p className="text-xs text-slate-400 mt-1">NO TRADES</p>}
+          </div>
+        </div>
+
+        {/* Realized PnL */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+          <div className="flex justify-between items-start">
+            <span className="text-sm font-medium text-slate-500 uppercase">Realized PnL</span>
+            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-4">
+            <span className={`text-3xl font-bold ${data.realizedPnL >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {data.realizedPnL !== 0 ? `${data.realizedPnL > 0 ? '+' : ''}${data.realizedPnL} USDT` : '0 USDT'}
+            </span>
+            {data.realizedPnL === 0 && <p className="text-xs text-slate-400 mt-1">NO DATA</p>}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+        {/* Recent Logs Panel */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h3 className="font-semibold text-slate-800">Recent Activity</h3>
+          </div>
+          <div className="p-0">
+            {data.recentLogs.length === 0 ? (
+              <div className="p-8 text-center text-slate-500">
+                <p>No recent activity logs.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {data.recentLogs.map((log) => (
+                  <div key={log.id} className="p-4 flex gap-4 hover:bg-slate-50 transition-colors">
+                    <div className="mt-1">
+                      {log.level === 'ERROR' ? (
+                        <div className="h-2 w-2 rounded-full bg-red-500 mt-1.5" />
+                      ) : log.level === 'WARN' ? (
+                        <div className="h-2 w-2 rounded-full bg-orange-500 mt-1.5" />
+                      ) : (
+                        <div className="h-2 w-2 rounded-full bg-blue-500 mt-1.5" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm text-slate-800">{log.message}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs font-medium text-slate-500">{log.category}</span>
+                        <span className="text-xs text-slate-400">•</span>
+                        <span className="text-xs text-slate-400">{new Date(log.created_at).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
-  )
+  );
 }

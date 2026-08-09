@@ -22,6 +22,7 @@ export interface BaseEvent {
   eventVersion: string;
   schemaVersion: string;
   robotId: string;
+  configVersion: number;
   trace: DecisionTrace;
   timestamp: number;
 }
@@ -46,6 +47,7 @@ export class EventFactory {
   public static createEvent<T extends Record<string, any>>(
     eventType: string,
     robotId: string,
+    configVersion: number,
     trace: DecisionTrace,
     payload: T
   ): BaseEvent & T {
@@ -63,6 +65,7 @@ export class EventFactory {
       eventVersion: 'v1.0.0', // Tương lai có thể upgrade theo Semantic Versioning
       schemaVersion: '1.0.0',
       robotId,
+      configVersion,
       trace,
       timestamp
     } as BaseEvent & T;

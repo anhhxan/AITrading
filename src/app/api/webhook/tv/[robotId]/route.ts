@@ -35,6 +35,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     const resolvedParams = await params;
     const robotId = resolvedParams.robotId;
     
+    // 1. Resolve Slug to UUID
+    const { RobotResolver } = require('@/core/adapters/tradingview/RobotResolver');
+    const coreRobotId = await RobotResolver.resolveSlugToUUID(robotId);
+    
+    if (!coreRobotId) {
+        return NextResponse.json({ error: 'ROBOT_NOT_FOUND' }, { status: 404 });
+    }
+
     let rawPayloadStr = '';
     let payload;
     try {
@@ -48,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     // Hash tính trực tiếp từ raw JSON nhận được, trước khi mutate.
     const payloadHash = crypto.createHash('sha256').update(rawPayloadStr).digest('hex');
 
-    await ensureInitialized(robotId);
+    await ensureInitialized(coreRobotId);
 
     // Khởi tạo Adapter
     const adapter = new TradingViewAdapter();
@@ -66,10 +74,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         }
     };
     
-    adapter.registerConfig(robotId, expectedConfig);
+    adapter.registerConfig(coreRobotId, expectedConfig);
 
     // Validation Gate
-    const adapterResult = await adapter.handleWebhook(payload, robotId);
+    const adapterResult = await adapter.handleWebhook(payload, coreRobotId);
     
     const correlationId = adapterResult.correlationId || null;
     let eventSequence: number | null = null;

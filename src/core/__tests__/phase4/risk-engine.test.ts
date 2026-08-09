@@ -18,7 +18,7 @@ describe('Phase 4A: Risk Engine (TDD)', () => {
   };
 
   const createSignal = (direction: 'LONG' | 'SHORT', line1: number, line3: number, line5: number, seq: number = 22) => {
-    return EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, EventFactory.createTrace(`corr-${seq}`, 'ind-event', 'strat', seq), {
+    return EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, 1 /* configVersion */, EventFactory.createTrace(`corr-${seq}`, 'ind-event', 'strat', seq), {
       direction,
       maxTimeoutCandles: 3,
       strategyId: 'BB_Strategy',
@@ -32,7 +32,7 @@ describe('Phase 4A: Risk Engine (TDD)', () => {
   };
 
   const createReadyToEnter = (triggerPrice: number, seq: number = 23) => {
-    return EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, EventFactory.createTrace('corr-22', `candle-${seq}`, 'fsm', seq), {
+    return EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, 1 /* configVersion */, EventFactory.createTrace('corr-22', `candle-${seq}`, 'fsm', seq), {
       previousState: RobotState.WAIT_RETRACEMENT,
       newState: RobotState.READY_TO_ENTER,
       reason: 'TRIGGER_MATCHED',
@@ -153,10 +153,10 @@ describe('Phase 4A: Risk Engine (TDD)', () => {
     let rejected = null;
     coreEventBus.subscribe('RISK_REJECTED_EVENT', (e: any) => rejected = e);
 
-    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotMissing', EventFactory.createTrace('c1', 'p1', 's', 1), {
+    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotMissing', 1 /* configVersion */, EventFactory.createTrace('c1', 'p1', 's', 1), {
       direction: 'LONG', indicatorReference: { name: 'BB', snapshot: { line5: 90, line3: 100 } }
     }));
-    await coreEventBus.publish(EventFactory.createEvent('STATE_TRANSITION_EVENT', 'RobotMissing', EventFactory.createTrace('c1', 'p1', 'fsm', 2), {
+    await coreEventBus.publish(EventFactory.createEvent('STATE_TRANSITION_EVENT', 'RobotMissing', 1 /* configVersion */, EventFactory.createTrace('c1', 'p1', 'fsm', 2), {
       newState: RobotState.READY_TO_ENTER, triggerPrice: 95
     }));
     await coreEventBus.waitForIdle('RobotMissing');

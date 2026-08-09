@@ -7,7 +7,7 @@ function runDeterministic() {
     Clock.setTime(1620000000000);
     IdGenerator.setDeterministic('deterministic-base');
     const trace = EventFactory.createTrace('t-1', 'root', 'Engine', 1);
-    const ev = EventFactory.createEvent('MOCK_EVENT', 'R-1', trace, { payload: 'hello' });
+    const ev = EventFactory.createEvent('MOCK_EVENT', 'R-1', 1 /* configVersion */, trace, { payload: 'hello' });
     const str = JSON.stringify(ev);
     return crypto.createHash('sha256').update(str).digest('hex');
 }
@@ -16,7 +16,7 @@ function runLive() {
     Clock.reset();
     IdGenerator.reset();
     const trace = EventFactory.createTrace('t-2', 'root', 'Engine', 1);
-    const ev = EventFactory.createEvent('MOCK_EVENT', 'R-2', trace, { payload: 'hello' });
+    const ev = EventFactory.createEvent('MOCK_EVENT', 'R-2', 1 /* configVersion */, trace, { payload: 'hello' });
     return ev.eventId;
 }
 

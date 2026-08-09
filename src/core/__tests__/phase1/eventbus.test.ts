@@ -23,7 +23,7 @@ describe('EventBus Contract (CQRS & Ordering)', () => {
 
     for (let i = 1; i <= 100; i++) {
       const trace = EventFactory.createTrace('corr1', 'root', 'Engine', i);
-      eventBus.publish(EventFactory.createEvent('TEST_EVENT', 'ROBOT-1', trace, { payload: i }));
+      eventBus.publish(EventFactory.createEvent('TEST_EVENT', 'ROBOT-1', 1 /* configVersion */, trace, { payload: i }));
     }
 
     await eventBus.waitForIdle('ROBOT-1');
@@ -48,8 +48,8 @@ describe('EventBus Contract (CQRS & Ordering)', () => {
     });
 
     for (let i = 1; i <= 50; i++) {
-      eventBus.publish(EventFactory.createEvent('TEST_EVENT', 'ROBOT-A', EventFactory.createTrace('A', '', '', i), {}));
-      eventBus.publish(EventFactory.createEvent('TEST_EVENT', 'ROBOT-B', EventFactory.createTrace('B', '', '', i), {}));
+      eventBus.publish(EventFactory.createEvent('TEST_EVENT', 'ROBOT-A', 1 /* configVersion */, EventFactory.createTrace('A', '', '', i), {}));
+      eventBus.publish(EventFactory.createEvent('TEST_EVENT', 'ROBOT-B', 1 /* configVersion */, EventFactory.createTrace('B', '', '', i), {}));
     }
 
     await eventBus.waitForIdle('ROBOT-B');
@@ -70,9 +70,9 @@ describe('EventBus Contract (CQRS & Ordering)', () => {
       processed.push(event.trace.sequence);
     });
 
-    eventBus.publish(EventFactory.createEvent('BLOCK_EVENT', 'R1', EventFactory.createTrace('C', '', '', 100), {}));
-    eventBus.publish(EventFactory.createEvent('BLOCK_EVENT', 'R1', EventFactory.createTrace('C', '', '', 101), {}));
-    eventBus.publish(EventFactory.createEvent('BLOCK_EVENT', 'R1', EventFactory.createTrace('C', '', '', 102), {}));
+    eventBus.publish(EventFactory.createEvent('BLOCK_EVENT', 'R1', 1 /* configVersion */, EventFactory.createTrace('C', '', '', 100), {}));
+    eventBus.publish(EventFactory.createEvent('BLOCK_EVENT', 'R1', 1 /* configVersion */, EventFactory.createTrace('C', '', '', 101), {}));
+    eventBus.publish(EventFactory.createEvent('BLOCK_EVENT', 'R1', 1 /* configVersion */, EventFactory.createTrace('C', '', '', 102), {}));
 
     // Sau 100ms, event 100 vẫn đang chặn toàn bộ pipeline
     await new Promise(r => setTimeout(r, 100));
@@ -108,11 +108,11 @@ describe('EventBus Contract (CQRS & Ordering)', () => {
           // The new rule: we should start expected=1 always, or we initialize it correctly.
           // To make it simple, we publish 1 first.
           
-          bus.publish(EventFactory.createEvent('FUZZ', 'FUZZ-ROBOT', EventFactory.createTrace('C', '', '', 1), {}));
+          bus.publish(EventFactory.createEvent('FUZZ', 'FUZZ-ROBOT', 1 /* configVersion */, EventFactory.createTrace('C', '', '', 1), {}));
           
           for (const seq of shuffled) {
             if (seq === 1) continue; // Already published
-            bus.publish(EventFactory.createEvent('FUZZ', 'FUZZ-ROBOT', EventFactory.createTrace('C', '', '', seq), {}));
+            bus.publish(EventFactory.createEvent('FUZZ', 'FUZZ-ROBOT', 1 /* configVersion */, EventFactory.createTrace('C', '', '', seq), {}));
           }
 
           await bus.waitForIdle('FUZZ-ROBOT');

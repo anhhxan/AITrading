@@ -45,12 +45,12 @@ describe('Phase 3: Snapshot Lineage Regression', () => {
       const trace = EventFactory.createTrace('trace_1', 'p1', 'ext', seq++);
       
       // Send Candle FIRST to update StrategyEngine's currentPrices
-      await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotL1', trace, {
+      await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotL1', 1 /* configVersion */, trace, {
         candle: { timestamp: seq * 1000, open: closePrice, high: closePrice, low: closePrice, close: closePrice, volume: 1 }
       }) as any);
       
       // Send Indicator Snapshot SECOND to trigger Strategy evaluate
-      await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotL1', trace, {
+      await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotL1', 1 /* configVersion */, trace, {
         indicators: {
           BB_MB: { 
             ready: true, 

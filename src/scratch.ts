@@ -20,7 +20,7 @@ async function test() {
   coreEventBus.subscribe('TRADE_PLAN_EVENT', async (e) => { console.log('TRADE_PLAN:', e); });
   coreEventBus.subscribe('RISK_REJECTED_EVENT', async (e) => { console.log('RISK_REJECTED:', e); });
 
-  const signal = EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, EventFactory.createTrace(`corr-22`, 'ind-event', 'strat', 22), {
+  const signal = EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, 1 /* configVersion */, EventFactory.createTrace(`corr-22`, 'ind-event', 'strat', 22), {
     direction: 'LONG',
     maxTimeoutCandles: 3,
     strategyId: 'BB_Strategy',
@@ -32,7 +32,7 @@ async function test() {
     }
   });
 
-  const ready = EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, EventFactory.createTrace('corr-22', `candle-24`, 'fsm', 24), {
+  const ready = EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, 1 /* configVersion */, EventFactory.createTrace('corr-22', `candle-24`, 'fsm', 24), {
     previousState: RobotState.WAIT_RETRACEMENT,
     newState: RobotState.READY_TO_ENTER,
     reason: 'TRIGGER_MATCHED',

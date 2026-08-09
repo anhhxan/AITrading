@@ -91,7 +91,8 @@ export class MarketDataEngine implements IEngine {
     // 3. Đóng gói thành Event
     const event = EventFactory.createEvent(
       'CANDLE_CLOSED_EVENT',
-      robotId,
+      robotId, 
+      1, // configVersion (default for test data feed)
       trace,
       { candle }
     );

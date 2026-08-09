@@ -42,7 +42,7 @@ export class EngineOrchestrator {
     if (allReady) {
       console.log("[Orchestrator] All engines READY. Emitting START_DATA_FEED.");
       const trace = EventFactory.createTrace('sys-startup', 'root', 'Orchestrator', 0);
-      const event = EventFactory.createEvent('START_DATA_FEED', 'system', trace, {});
+      const event = EventFactory.createEvent('START_DATA_FEED', 'system', 0, trace, {});
       await coreEventBus.publish(event);
       
       this.startHealthMonitor();

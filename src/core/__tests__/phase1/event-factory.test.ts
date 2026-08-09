@@ -6,7 +6,7 @@ describe('EventFactory & DecisionTrace Contract', () => {
   it('E1: Phải tự động gắn IdempotencyKey từ bối cảnh Trace', () => {
     Clock.setTime(5000);
     const trace = EventFactory.createTrace('corr-999', 'parent-1', 'StrategyEngine', 5);
-    const event = EventFactory.createEvent('ORDER_CREATED_EVENT', 'ROBOT-A', trace, { price: 100 });
+    const event = EventFactory.createEvent('ORDER_CREATED_EVENT', 'ROBOT-A', 1 /* configVersion */, trace, { price: 100 });
 
     expect(event.eventId).toBeDefined();
     expect(event.idempotencyKey).toBe('ROBOT-A-ORDER_CREATED_EVENT-corr-999-5');

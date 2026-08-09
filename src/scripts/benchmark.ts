@@ -19,7 +19,7 @@ async function runBenchmark() {
   bench.add('EventBus Publish & Process 1000 events', async () => {
     for (let i = 0; i < 1000; i++) {
       const trace = EventFactory.createTrace('c1', '', '', i);
-      const event = EventFactory.createEvent('BENCH_EVENT', 'R1', trace, {});
+      const event = EventFactory.createEvent('BENCH_EVENT', 'R1', 1 /* configVersion */, trace, {});
       await bus.publish(event);
     }
     await bus.waitForIdle('R1');

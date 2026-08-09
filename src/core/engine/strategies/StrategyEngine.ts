@@ -85,7 +85,7 @@ export class StrategyEngine implements IEngine {
        
        const nextEvent = EventFactory.createEvent(
          'STRATEGY_SIGNAL_EVENT',
-         robotId,
+         robotId, event.configVersion || 1,
          trace,
          { 
            direction: signal.direction,

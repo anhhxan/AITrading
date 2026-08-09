@@ -26,15 +26,15 @@ describe('Phase 3: State Machine Deterministic Hash', () => {
 
     const trace = EventFactory.createTrace('corr1', 'p1', 'eng', 1);
 
-    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotHash', trace, {
+    await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotHash', 1 /* configVersion */, trace, {
       direction: 'LONG', maxTimeoutCandles: 2, entryTrigger: { type: 'RETRACEMENT_ZONE', lower: 90, upper: 92 }
     }) as any);
     
-    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotHash', trace, {
+    await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotHash', 1 /* configVersion */, trace, {
         indicators: { BB_MB: { band4: 100, band5: 90 } } 
     }) as any);
 
-    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotHash', trace, {
+    await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotHash', 1 /* configVersion */, trace, {
       candle: { close: 91 }
     }) as any);
     
@@ -74,15 +74,15 @@ describe('Phase 3: State Machine Deterministic Hash', () => {
   
       const trace = EventFactory.createTrace('corr1', 'p1', 'eng', 1);
   
-      await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotHash', trace, {
+      await coreEventBus.publish(EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', 'RobotHash', 1 /* configVersion */, trace, {
         direction: 'LONG', maxTimeoutCandles: 2, entryTrigger: { type: 'RETRACEMENT_ZONE', lower: 90, upper: 92 }
       }) as any);
       
-      await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotHash', trace, {
+      await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotHash', 1 /* configVersion */, trace, {
           indicators: { BB_MB: { band4: 100, band5: 90 } } 
       }) as any);
   
-      await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotHash', trace, {
+      await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', 'RobotHash', 1 /* configVersion */, trace, {
         candle: { close: 91 }
       }) as any);
       

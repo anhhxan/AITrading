@@ -29,7 +29,7 @@ describe('Phase 2: Indicator Warmup Test', () => {
     // Emit 19 candles
     for (let i = 1; i <= 19; i++) {
       const trace = EventFactory.createTrace('test-corr', 'parent', 'test-engine', i);
-      const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', 'RobotW1', trace, {
+      const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', 'RobotW1', 1 /* configVersion */, trace, {
         candle: { timestamp: i, open: 100, high: 105, low: 95, close: 100 + i, volume: 1000 }
       });
       await coreEventBus.publish(candleEvent as any);
@@ -43,7 +43,7 @@ describe('Phase 2: Indicator Warmup Test', () => {
 
     // Emit 20th candle
     const trace20 = EventFactory.createTrace('test-corr', 'parent', 'test-engine', 20);
-    const candle20 = EventFactory.createEvent('CANDLE_CLOSED', 'RobotW1', trace20, {
+    const candle20 = EventFactory.createEvent('CANDLE_CLOSED', 'RobotW1', 1 /* configVersion */, trace20, {
       candle: { timestamp: 20, open: 100, high: 105, low: 95, close: 120, volume: 1000 }
     });
     await coreEventBus.publish(candle20 as any);

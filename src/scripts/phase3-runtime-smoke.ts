@@ -49,7 +49,7 @@ async function runPhase3SmokeTest() {
   let candleSequence = 1;
   const feedCandle = async (price: number) => {
     const trace = EventFactory.createTrace(`trace-candle-${candleSequence}`, `parent-candle-${candleSequence}`, 'MockDataFeed', candleSequence);
-    const event = EventFactory.createEvent('CANDLE_CLOSED', 'smoke-bot-3', trace, {
+    const event = EventFactory.createEvent('CANDLE_CLOSED', 'smoke-bot-3', 1 /* configVersion */, trace, {
       candle: { timestamp: Date.now(), open: price, high: price, low: price, close: price, volume: 1000 }
     });
     await coreEventBus.publish(event as any);

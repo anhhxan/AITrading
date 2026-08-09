@@ -45,7 +45,7 @@ async function runPhase4SmokeTest() {
 
   // 1. Fire original signal at Candle #22
   console.log('\n[SMOKE TEST] Publishing original STRATEGY_SIGNAL_EVENT at #22');
-  const signal = EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, EventFactory.createTrace('corr-22', 'candle-22', 'StrategyEngine', 22), {
+  const signal = EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, 1 /* configVersion */, EventFactory.createTrace('corr-22', 'candle-22', 'StrategyEngine', 22), {
     direction: 'LONG',
     maxTimeoutCandles: 3,
     strategyId: 'BB_Strategy',
@@ -60,7 +60,7 @@ async function runPhase4SmokeTest() {
 
   // 2. Fire ready to enter at Candle #23 (Trigger Price = 95)
   console.log('[SMOKE TEST] Publishing STATE_TRANSITION_EVENT (READY_TO_ENTER) at #23');
-  const transition = EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, EventFactory.createTrace('corr-22', 'candle-23', 'StateMachineEngine', 23), {
+  const transition = EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, 1 /* configVersion */, EventFactory.createTrace('corr-22', 'candle-23', 'StateMachineEngine', 23), {
     previousState: RobotState.WAIT_RETRACEMENT,
     newState: RobotState.READY_TO_ENTER,
     reason: 'TRIGGER_MATCHED',

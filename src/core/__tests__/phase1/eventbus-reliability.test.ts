@@ -15,6 +15,7 @@ const createMockEvent = (
   eventVersion: 'v1.0.0',
   schemaVersion: '1.0.0',
   robotId,
+  configVersion: 1,
   trace: {
     traceId: 'trace-1',
     correlationId: 'corr-1',

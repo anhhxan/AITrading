@@ -15,8 +15,8 @@ describe('Phase 1 Foundation Correction: Deterministic Clock + ID Generation', (
     
     expect(trace1.traceId).not.toBe(trace2.traceId);
     
-    const ev1 = EventFactory.createEvent('TEST', 'R1', trace1, {});
-    const ev2 = EventFactory.createEvent('TEST', 'R1', trace2, {});
+    const ev1 = EventFactory.createEvent('TEST', 'R1', 1 /* configVersion */, trace1, {});
+    const ev2 = EventFactory.createEvent('TEST', 'R1', 1 /* configVersion */, trace2, {});
 
     expect(ev1.eventId).not.toBe(ev2.eventId);
   });
@@ -27,7 +27,7 @@ describe('Phase 1 Foundation Correction: Deterministic Clock + ID Generation', (
       IdGenerator.setDeterministic('mock-uuid-base');
 
       const trace = EventFactory.createTrace('corr-hash', 'root', 'Engine', 1);
-      const ev = EventFactory.createEvent('MOCK_EVENT', 'R-Hash', trace, { data: 123 });
+      const ev = EventFactory.createEvent('MOCK_EVENT', 'R-Hash', 1 /* configVersion */, trace, { data: 123 });
 
       const hash = crypto.createHash('sha256').update(JSON.stringify(ev)).digest('hex');
       return hash;

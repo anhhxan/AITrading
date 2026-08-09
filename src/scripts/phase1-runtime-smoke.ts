@@ -40,7 +40,7 @@ async function run() {
       const candle = { timestamp: i * 60000, open: 100, high: 110, low: 90, close: 105, volume: 1000, isClosed: true };
       
       if (MarketDataValidator.validateCandle(candle)) {
-        await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', robotId, trace, { candle }));
+        await coreEventBus.publish(EventFactory.createEvent('CANDLE_CLOSED', robotId, 1 /* configVersion */, trace, { candle }));
       }
     }
     await coreEventBus.waitForIdle(robotId);
@@ -87,9 +87,9 @@ async function run() {
       oooProcessed.push(e.trace.sequence);
   });
   
-  const ooo1 = EventFactory.createEvent('OOO_EVENT', 'RobotOOO', EventFactory.createTrace('t2', 'r', 'e', 1), {});
-  const ooo3 = EventFactory.createEvent('OOO_EVENT', 'RobotOOO', EventFactory.createTrace('t2', 'r', 'e', 3), {});
-  const ooo2 = EventFactory.createEvent('OOO_EVENT', 'RobotOOO', EventFactory.createTrace('t2', 'r', 'e', 2), {});
+  const ooo1 = EventFactory.createEvent('OOO_EVENT', 'RobotOOO', 1 /* configVersion */, EventFactory.createTrace('t2', 'r', 'e', 1), {});
+  const ooo3 = EventFactory.createEvent('OOO_EVENT', 'RobotOOO', 1 /* configVersion */, EventFactory.createTrace('t2', 'r', 'e', 3), {});
+  const ooo2 = EventFactory.createEvent('OOO_EVENT', 'RobotOOO', 1 /* configVersion */, EventFactory.createTrace('t2', 'r', 'e', 2), {});
   
   await coreEventBus.publish(ooo1);
   await coreEventBus.publish(ooo3);
@@ -111,7 +111,7 @@ async function run() {
   coreEventBus.subscribe('IDEMP_EVENT', async (e: any) => {
     idempCount++;
   });
-  const idempEvt = EventFactory.createEvent('IDEMP_EVENT', 'RobotIDEMP', EventFactory.createTrace('t3', 'r', 'e', 1), {});
+  const idempEvt = EventFactory.createEvent('IDEMP_EVENT', 'RobotIDEMP', 1 /* configVersion */, EventFactory.createTrace('t3', 'r', 'e', 1), {});
   await coreEventBus.publish(idempEvt);
   await coreEventBus.publish({ ...idempEvt }); // duplicate exactly
   await coreEventBus.waitForIdle('RobotIDEMP');
@@ -130,7 +130,7 @@ async function run() {
     if (handlerRunCount === 1) throw new Error('Crash 1');
   });
 
-  const evt = EventFactory.createEvent('DLQ_EVENT', 'RobotDLQ', EventFactory.createTrace('t3', 'r', 'e', 1), {});
+  const evt = EventFactory.createEvent('DLQ_EVENT', 'RobotDLQ', 1 /* configVersion */, EventFactory.createTrace('t3', 'r', 'e', 1), {});
   await coreEventBus.publish(evt);
   await coreEventBus.waitForIdle('RobotDLQ');
   
@@ -150,8 +150,8 @@ async function run() {
   }
 
   console.log('[9] Shutdown');
-  const sd3 = EventFactory.createEvent('SD_EVENT', 'RobotSD', EventFactory.createTrace('t4', 'r', 'e', 3), {});
-  const sd1 = EventFactory.createEvent('SD_EVENT', 'RobotSD', EventFactory.createTrace('t4', 'r', 'e', 1), {});
+  const sd3 = EventFactory.createEvent('SD_EVENT', 'RobotSD', 1 /* configVersion */, EventFactory.createTrace('t4', 'r', 'e', 3), {});
+  const sd1 = EventFactory.createEvent('SD_EVENT', 'RobotSD', 1 /* configVersion */, EventFactory.createTrace('t4', 'r', 'e', 1), {});
   await coreEventBus.publish(sd1);
   await coreEventBus.publish(sd3);
 
@@ -159,7 +159,7 @@ async function run() {
   const shutdownPromise = coreEventBus.shutdown();
   
   try {
-    const sd4 = EventFactory.createEvent('SD_EVENT', 'RobotSD', EventFactory.createTrace('t4', 'r', 'e', 4), {});
+    const sd4 = EventFactory.createEvent('SD_EVENT', 'RobotSD', 1 /* configVersion */, EventFactory.createTrace('t4', 'r', 'e', 4), {});
     await coreEventBus.publish(sd4);
   } catch (err: any) {
     if (err.message.includes('shutting down')) rejectedNew = true;
@@ -183,7 +183,7 @@ async function run() {
     Clock.setTime(1620000000000);
     IdGenerator.setDeterministic('smoke-det');
     const tr = EventFactory.createTrace('t', 'r', 'e', 1);
-    const ev = EventFactory.createEvent('HASH_EVENT', 'R-HASH', tr, { pay: 1 });
+    const ev = EventFactory.createEvent('HASH_EVENT', 'R-HASH', 1 /* configVersion */, tr, { pay: 1 });
     return crypto.createHash('sha256').update(JSON.stringify(ev)).digest('hex');
   };
   

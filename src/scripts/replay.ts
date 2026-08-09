@@ -6,7 +6,7 @@ function runSimulation() {
   const traces = [];
   for (let i = 1; i <= 1000; i++) {
     const trace = EventFactory.createTrace('corr1', 'root', 'Engine', i);
-    const event = EventFactory.createEvent('MOCK_EVENT', 'R1', trace, { payload: i });
+    const event = EventFactory.createEvent('MOCK_EVENT', 'R1', 1 /* configVersion */, trace, { payload: i });
     traces.push(event.idempotencyKey);
   }
   return crypto.createHash('sha256').update(traces.join('')).digest('hex');
