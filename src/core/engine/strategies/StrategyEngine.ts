@@ -15,6 +15,17 @@ export interface StrategySignalEvent extends BaseEvent {
   };
   strategyId: string;
   strategyVersion: string;
+  indicatorReference?: {
+    name: string;
+    config: any;
+    snapshot: {
+      line1: number | null;
+      line2: number | null;
+      line3: number | null;
+      line4: number | null;
+      line5: number | null;
+    }
+  };
 }
 
 export class StrategyEngine implements IEngine {
@@ -60,6 +71,8 @@ export class StrategyEngine implements IEngine {
       currentPrice
     });
 
+    console.log(`[StrategyEngine] EVALUATED SIGNAL:`, signal);
+
     if (signal !== 'ERROR' && signal && signal.direction !== 'NONE') {
        const trace = EventFactory.createTrace(
          event.trace.correlationId,
@@ -68,6 +81,8 @@ export class StrategyEngine implements IEngine {
          event.trace.sequence
        );
 
+       const indicatorName = event.indicators['BB_MB'] ? 'BB_MB' : Object.keys(event.indicators)[0];
+       
        const nextEvent = EventFactory.createEvent(
          'STRATEGY_SIGNAL_EVENT',
          robotId,
@@ -77,7 +92,18 @@ export class StrategyEngine implements IEngine {
            maxTimeoutCandles: signal.maxTimeoutCandles || 3,
            entryTrigger: signal.entryTrigger,
            strategyId: strategy.name,
-           strategyVersion: 'v1.0.0'
+           strategyVersion: 'v1.0.0',
+           indicatorReference: {
+             name: indicatorName,
+             config: indicatorSnapshot.config || {},
+             snapshot: {
+               line1: indicatorSnapshot.line1,
+               line2: indicatorSnapshot.line2,
+               line3: indicatorSnapshot.line3,
+               line4: indicatorSnapshot.line4,
+               line5: indicatorSnapshot.line5
+             }
+           }
          }
        );
        
