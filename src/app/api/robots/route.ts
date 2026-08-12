@@ -1,76 +1,73 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
-import { ExpectedIndicatorConfigSchema } from '@/core/contracts/TradingViewConfig';
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
-export async function GET(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from('robots')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('[GET /api/robots] DB Error:', error);
-      return NextResponse.json({ error: 'Failed to fetch robots' }, { status: 500 });
-    }
-
-    return NextResponse.json(data);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
-}
-
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
+    const supabase = await createClient()
     
-    // Minimal validation
-    if (!body.name || !body.slug || !body.timeframe || !body.signal_source || !body.execution_symbol || !body.provider) {
-       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    // Validate authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized: You must be logged in to create a robot.' },
+        { status: 401 }
+      )
     }
 
-    // Force Canonical Mapping for TradingView if applicable
-    let indicatorProfile = body.indicator_profile || {};
-    if (body.signal_source === 'TradingView') {
-        const configToValidate = {
-            length: Number(indicatorProfile.length || 20),
-            source: indicatorProfile.source || 'close',
-            mult: Number(indicatorProfile.mult || 2.5),
-            mult2: Number(indicatorProfile.mult2 || 1.3),
-            // We omit mapping here because Zod will inject the default canonical mapping
-        };
-        const parsedConfig = ExpectedIndicatorConfigSchema.parse(configToValidate);
-        indicatorProfile = parsedConfig; // Now contains the enforced immutable mapping
+    // Parse request body
+    const body = await request.json()
+    const { name, slug, accountId, indicatorProfile, strategyProfile, riskProfile, entryProfile, exitProfile } = body
+
+    if (!name || !slug) {
+      return NextResponse.json(
+        { error: 'Name and slug are required' },
+        { status: 400 }
+      )
     }
 
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    // 1. Create the Robot using the authenticated user.id
+    const { data: robot, error: robotError } = await supabase
       .from('robots')
       .insert({
-        name: body.name,
-        slug: body.slug,
-        timeframe: body.timeframe,
-        signal_source: body.signal_source,
-        trading_view_symbol: body.trading_view_symbol || body.execution_symbol,
-        execution_symbol: body.execution_symbol,
-        provider: body.provider,
-        indicator_profile: indicatorProfile,
-        strategy_profile: body.strategy_profile || {},
-        risk_profile: body.risk_profile || {},
+        name,
+        slug,
+        user_id: user.id, // Strictly server-side authenticated user ID
+        current_state: 'IDLE',
         status: 'CREATED',
-        current_state: 'IDLE'
+        trading_account_id: accountId || null
       })
-      .select()
-      .single();
+      .select('*')
+      .single()
 
-    if (error) {
-      console.error('[POST /api/robots] DB Error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (robotError) {
+      console.error('Error inserting robot:', robotError)
+      return NextResponse.json({ error: robotError.message }, { status: 500 })
     }
 
-    return NextResponse.json(data, { status: 201 });
+    // 2. Create the initial Config (Status defaults to PENDING per schema)
+    const { error: configError } = await supabase
+      .from('robot_configs')
+      .insert({
+        robot_id: robot.id,
+        version: 1,
+        status: 'PENDING',
+        indicator_profile: indicatorProfile || { length: 20, source: 'close', mult: 2.0, mult2: 1.0 },
+        strategy_profile: strategyProfile || { type: 'REVERSAL' },
+        risk_profile: riskProfile || { max_position_size: 100, stop_loss_pct: 2.0 },
+        entry_profile: entryProfile || { mode: 'MARKET' },
+        exit_profile: exitProfile || { tp_mode: 'FIXED' },
+        created_by: user.id // Also strictly set by server
+      })
+
+    if (configError) {
+      console.error('Error inserting config:', configError)
+      return NextResponse.json({ error: configError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, robot }, { status: 201 })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('API /robots error:', err)
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
