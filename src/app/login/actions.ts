@@ -15,6 +15,12 @@ export async function login(formData: FormData) {
   })
 
   if (error) {
+    console.error('[AUTH LOGIN ERROR]', {
+      message: error.message,
+      status: error.status,
+      name: error.name,
+    })
+
     redirect('/login?error=Could not authenticate user')
   }
 
