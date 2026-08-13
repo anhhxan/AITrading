@@ -7,7 +7,8 @@ import { getSupabaseAdmin } from "../../../lib/supabase";
 export enum RobotState {
   WAIT_SIGNAL = 'WAIT_SIGNAL',
   WAIT_RETRACEMENT = 'WAIT_RETRACEMENT',
-  READY_TO_ENTER = 'READY_TO_ENTER'
+  READY_TO_ENTER = 'READY_TO_ENTER',
+  POSITION_OPEN = 'POSITION_OPEN'
 }
 
 export interface StateTransitionEvent extends BaseEvent {
@@ -15,6 +16,25 @@ export interface StateTransitionEvent extends BaseEvent {
   newState: RobotState;
   reason: string;
   triggerPrice?: number;
+}
+
+export interface PositionOpenedEvent extends BaseEvent {
+  symbol: string;
+  side: string;
+  quantity: number;
+  entryPrice: number;
+  stopLoss: number | null;
+  takeProfit: number | null;
+  leverage: number;
+}
+
+export interface PositionClosedEvent extends BaseEvent {
+  symbol: string;
+  side: string;
+  quantity: number;
+  exitPrice: number;
+  realizedPnl: number;
+  closeReason: string;
 }
 
 export class StateMachineEngine implements IEngine {
@@ -36,6 +56,14 @@ export class StateMachineEngine implements IEngine {
 
     this.unsubs.push(coreEventBus.subscribe('CANDLE_CLOSED', async (e: any) => {
        await this.handleCandleClosed(e);
+    }));
+
+    this.unsubs.push(coreEventBus.subscribe('POSITION_OPENED_EVENT', async (e: PositionOpenedEvent) => {
+       await this.handlePositionOpened(e);
+    }));
+
+    this.unsubs.push(coreEventBus.subscribe('POSITION_CLOSED_EVENT', async (e: PositionClosedEvent) => {
+       await this.handlePositionClosed(e);
     }));
 
     this.status = 'READY';
@@ -133,6 +161,70 @@ export class StateMachineEngine implements IEngine {
         );
         await coreEventBus.publish(transitionEvent as any);
       }
+    }
+  }
+
+  private async handlePositionOpened(event: PositionOpenedEvent) {
+    const robotId = event.robotId;
+    const currentState = this.states.get(robotId);
+    
+    // Valid transition: READY_TO_ENTER -> POSITION_OPEN
+    if (currentState === RobotState.READY_TO_ENTER) {
+      this.states.set(robotId, RobotState.POSITION_OPEN);
+      await this.persistState(robotId, RobotState.POSITION_OPEN);
+      
+      const trace = EventFactory.createTrace(
+        event.trace.correlationId,
+        event.eventId,
+        this.engineId,
+        event.trace.sequence
+      );
+
+      const transitionEvent = EventFactory.createEvent(
+        'STATE_TRANSITION_EVENT',
+        robotId, event.configVersion || 1,
+        trace,
+        {
+          previousState: RobotState.READY_TO_ENTER,
+          newState: RobotState.POSITION_OPEN,
+          reason: 'POSITION_OPENED'
+        }
+      );
+      await coreEventBus.publish(transitionEvent as any);
+    } else {
+      console.warn(`[StateMachineEngine] REJECTED POSITION_OPENED_EVENT for ${robotId}. Invalid state: ${currentState}`);
+    }
+  }
+
+  private async handlePositionClosed(event: PositionClosedEvent) {
+    const robotId = event.robotId;
+    const currentState = this.states.get(robotId);
+    
+    // Valid transition: POSITION_OPEN -> WAIT_SIGNAL
+    if (currentState === RobotState.POSITION_OPEN) {
+      this.states.set(robotId, RobotState.WAIT_SIGNAL);
+      await this.persistState(robotId, RobotState.WAIT_SIGNAL);
+      
+      const trace = EventFactory.createTrace(
+        event.trace.correlationId,
+        event.eventId,
+        this.engineId,
+        event.trace.sequence
+      );
+
+      const transitionEvent = EventFactory.createEvent(
+        'STATE_TRANSITION_EVENT',
+        robotId, event.configVersion || 1,
+        trace,
+        {
+          previousState: RobotState.POSITION_OPEN,
+          newState: RobotState.WAIT_SIGNAL,
+          reason: 'POSITION_CLOSED'
+        }
+      );
+      await coreEventBus.publish(transitionEvent as any);
+    } else {
+      console.warn(`[StateMachineEngine] REJECTED POSITION_CLOSED_EVENT for ${robotId}. Invalid state: ${currentState}`);
     }
   }
 
