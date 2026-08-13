@@ -113,7 +113,11 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                 <p className="font-semibold text-slate-900">{robot.trading_enabled ? <span className="text-emerald-600">ON</span> : <span className="text-red-500">OFF</span>}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">Symbol</p>
+                <p className="text-xs text-slate-500 mb-1">TradingView Symbol</p>
+                <p className="font-semibold text-slate-900">{robot.trading_view_symbol || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Execution Symbol</p>
                 <p className="font-semibold text-slate-900">{robot.execution_symbol || 'N/A'}</p>
               </div>
             </div>
@@ -132,21 +136,74 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
               ) : (
                 <div className="space-y-4">
                   {positions.map((pos: any) => (
-                    <div key={pos.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-lg border border-slate-100">
-                      <div>
-                        <div className="font-bold text-slate-900">{pos.symbol} <span className={`text-xs px-2 py-1 rounded ${pos.side === 'LONG' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{pos.side}</span></div>
-                        <div className="text-sm text-slate-500 mt-1">Qty: {pos.quantity} @ {pos.entry_price}</div>
+                    <div key={pos.id} className="flex flex-col gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="text-xs text-slate-500">PAPER TRADING</div>
+                          <div className="font-bold text-slate-900 flex items-center gap-2 mt-1">
+                            {pos.symbol}
+                            <span className={`text-xs px-2 py-1 rounded ${pos.side === 'LONG' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{pos.side}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-slate-500">Unrealized PnL</div>
+                          <div className={`font-semibold text-lg ${pos.unrealized_pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {pos.unrealized_pnl >= 0 ? '+' : ''}{pos.unrealized_pnl}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-xs text-slate-500">Unrealized PnL</div>
-                        <div className={`font-semibold ${pos.unrealized_pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {pos.unrealized_pnl >= 0 ? '+' : ''}{pos.unrealized_pnl}
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="block text-xs text-slate-500">Entry Price</span>
+                          <span className="font-medium">{pos.entry_price}</span>
+                        </div>
+                        <div>
+                          <span className="block text-xs text-slate-500">Current Price</span>
+                          <span className="font-medium text-slate-400">N/A (Current Candle Close)</span>
+                        </div>
+                        <div>
+                          <span className="block text-xs text-slate-500">Take Profit</span>
+                          <span className="font-medium text-green-600">{pos.take_profit_price || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="block text-xs text-slate-500">Stop Loss</span>
+                          <span className="font-medium text-red-600">{pos.stop_loss_price || 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="block text-xs text-slate-500">Quantity</span>
+                          <span className="font-medium">{pos.quantity}</span>
+                        </div>
+                        <div>
+                          <span className="block text-xs text-slate-500">Leverage</span>
+                          <span className="font-medium">{pos.leverage}x</span>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100">
+                <h3 className="font-semibold text-slate-800 text-sm">INDICATOR SNAPSHOT (5 LINES)</h3>
+              </div>
+              <div className="p-4 text-sm text-slate-500">
+                <span className="text-red-500 font-medium">MISSING</span>
+                <p className="mt-1 text-xs">The 5-line historical snapshot is generated by BB_MB but not currently persisted to `trade_snapshots` DB table.</p>
+              </div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100">
+                <h3 className="font-semibold text-slate-800 text-sm">ENTRY AUDIT</h3>
+              </div>
+              <div className="p-4 text-sm text-slate-500">
+                <span className="text-red-500 font-medium">MISSING</span>
+                <p className="mt-1 text-xs">Signal, Previous Close, and Trigger Zone values are not persisted to DB during Entry. Cannot display audit trace.</p>
+              </div>
             </div>
           </div>
 
@@ -209,14 +266,19 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                   <div className="p-4 text-sm text-slate-500">No trades yet.</div>
                 ) : (
                   trades.map((trade: any) => (
-                    <div key={trade.id} className="p-4 text-sm flex justify-between">
+                    <div key={trade.id} className="p-4 text-sm flex justify-between items-center">
                       <div>
                         <div className="font-medium">{trade.action} {trade.amount} {robot.execution_symbol}</div>
-                        <div className="text-xs text-slate-400">@ {trade.entry_price || trade.exit_price}</div>
+                        <div className="text-xs text-slate-500 mt-1">Entry: {trade.entry_price || 'N/A'} | Exit: {trade.exit_price || 'N/A'}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          Reason: <span className="font-semibold text-slate-600">{trade.reason || 'UNKNOWN'}</span>
+                        </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-xs font-semibold">PnL: {trade.pnl || 0}</div>
-                        <div className="text-xs text-slate-400">{new Date(trade.created_at).toLocaleString()}</div>
+                        <div className={`text-sm font-semibold ${trade.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          PnL: {trade.pnl > 0 ? '+' : ''}{trade.pnl || 0}
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">{new Date(trade.created_at).toLocaleString()}</div>
                       </div>
                     </div>
                   ))
