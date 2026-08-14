@@ -39,8 +39,8 @@ export default function CreateRobotForm({ accounts }: { accounts: { id: string, 
       indicatorProfile: {
         length: parseInt(formData.get('indicatorLength') as string || '20'),
         source: formData.get('indicatorSource') as string || 'close',
-        mult: 2.0,
-        mult2: 1.0,
+        mult: parseFloat(formData.get('indicatorMult') as string || '2.0'),
+        mult2: parseFloat(formData.get('indicatorMult2') as string || '1.0'),
       },
       strategyProfile: { type: 'REVERSAL' },
       riskProfile: {
@@ -159,6 +159,31 @@ export default function CreateRobotForm({ accounts }: { accounts: { id: string, 
                   <option value="high">High</option>
                   <option value="low">Low</option>
                 </select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Mult</label>
+                <input 
+                  type="number" 
+                  step="0.1"
+                  name="indicatorMult" 
+                  defaultValue="2.0"
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Mult2</label>
+                <input 
+                  type="number" 
+                  step="0.1"
+                  name="indicatorMult2" 
+                  defaultValue="1.0"
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none"
+                />
               </div>
             </div>
           </div>
