@@ -14,7 +14,7 @@ export default function SimulatorPage() {
   // Config State
   const [tradingViewSymbol, setTradingViewSymbol] = useState('BINANCE:BTCUSDT');
   const [executionSymbol, setExecutionSymbol] = useState('BTCUSDT');
-  const [timeframe, setTimeframe] = useState('15');
+  const [timeframe, setTimeframe] = useState('15m');
   const [bbLength, setBbLength] = useState(20);
   const [bbSource, setBbSource] = useState('close');
   const [bbMult, setBbMult] = useState(2.0);
@@ -249,10 +249,10 @@ export default function SimulatorPage() {
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Timeframe</label>
               <select value={timeframe} onChange={e => setTimeframe(e.target.value)} className="w-full border p-2 rounded text-sm bg-slate-50 focus:bg-white">
-                <option value="15">15M</option>
-                <option value="30">30M</option>
-                <option value="60">1H</option>
-                <option value="180">3H</option>
+                <option value="15m">15M</option>
+                <option value="30m">30M</option>
+                <option value="1H">1H</option>
+                <option value="3H">3H</option>
               </select>
             </div>
             <div>
