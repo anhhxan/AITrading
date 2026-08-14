@@ -37,7 +37,9 @@ export async function setupPOCEngines() {
   
   const riskEngine = new RiskEngine();
   const riskConfig: RiskConfig = {
-    symbol: 'XAUUSD',
+    tradingViewSymbol: 'XAUUSD',
+    executionSymbol: 'XAUUSD',
+    timeframe: '15m',
     accountBalance: 10000,
     riskPercent: 0.01, // 1%
     maxAllocationPercent: 0.20,

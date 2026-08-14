@@ -74,7 +74,7 @@ export class PaperExecutionEngine implements IEngine {
           signal_id: event.eventId,
           client_order_id: clientOrderId,
           action: action,
-          symbol: event.symbol,
+          symbol: event.executionSymbol,
           order_type: 'MARKET',
           quantity: event.positionSize,
           price: event.entryReferencePrice,
@@ -104,7 +104,7 @@ export class PaperExecutionEngine implements IEngine {
           robot_id: event.robotId,
           binance_order_id: binanceOrderId,
           client_order_id: clientOrderId,
-          symbol: event.symbol,
+          symbol: event.executionSymbol,
           side: side,
           order_type: 'MARKET',
           quantity: event.positionSize,
@@ -129,7 +129,7 @@ export class PaperExecutionEngine implements IEngine {
         .from('active_positions')
         .insert({
           robot_id: event.robotId,
-          symbol: event.symbol,
+          symbol: event.executionSymbol,
           side: positionSide, // Wait, active_positions side is VARCHAR, usually BUY/SELL or LONG/SHORT? 
           // Phase 3 migration active_positions: side VARCHAR(10) NOT NULL. Let's use LONG/SHORT.
           quantity: event.positionSize,
@@ -139,7 +139,14 @@ export class PaperExecutionEngine implements IEngine {
           realized_pnl: 0,
           stop_loss_price: event.stopLoss,
           take_profit_price: event.takeProfit,
-          binance_position_id: null
+          binance_position_id: null,
+          context_snapshot: {
+            executionSymbol: event.executionSymbol,
+            tradingViewSymbol: event.tradingViewSymbol,
+            timeframe: event.timeframe,
+            strategyId: event.strategyId,
+            indicatorSnapshot: event.indicatorReference
+          }
         })
         .select('id')
         .single();
@@ -165,7 +172,11 @@ export class PaperExecutionEngine implements IEngine {
       );
 
       const openedEvent = EventFactory.createEvent('POSITION_OPENED_EVENT', event.robotId, event.configVersion || 1, trace, {
-        symbol: event.symbol,
+        symbol: event.executionSymbol,
+        tradingViewSymbol: event.tradingViewSymbol,
+        timeframe: event.timeframe,
+        strategyId: event.strategyId,
+        indicatorSnapshot: event.indicatorReference,
         side: positionSide,
         quantity: event.positionSize,
         entryPrice: event.entryReferencePrice,

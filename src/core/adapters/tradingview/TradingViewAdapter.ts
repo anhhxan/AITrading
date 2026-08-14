@@ -63,6 +63,8 @@ export class TradingViewAdapter {
 
   // Canonicalize TradingView timeframe (e.g. "180" -> "3H")
   private canonicalizeTimeframe(tvTimeframe: string): string {
+    if (tvTimeframe === '15') return '15m';
+    if (tvTimeframe === '30') return '30m';
     if (tvTimeframe === '60') return '1H';
     if (tvTimeframe === '120') return '2H';
     if (tvTimeframe === '180') return '3H';

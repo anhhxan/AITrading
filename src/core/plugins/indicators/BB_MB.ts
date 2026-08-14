@@ -3,23 +3,27 @@ import { Candle, IIndicator } from '../../interfaces/PluginInterfaces';
 export class BB_MB_Indicator implements IIndicator {
   public readonly name = 'BB_MB';
   
-  private length: number = 20;
-  private source: string = 'close';
-  private mult1: number = 2.0; // Outer bands (Band 4, Band 1)
-  private mult2: number = 1.0; // Inner bands (Band 5, Band 2)
+  private length: number = 0;
+  private source: string = '';
+  private mult1: number = 0;
+  private mult2: number = 0;
   
   private valueHistory: number[] = [];
 
   public init(params: Record<string, any>): void {
-    if (params.length !== undefined) this.length = params.length;
-    if (params.source !== undefined) this.source = params.source;
-    if (params.mult !== undefined) this.mult1 = params.mult;
-    if (params.mult2 !== undefined) this.mult2 = params.mult2;
+    if (params.length === undefined || params.mult === undefined || params.mult2 === undefined || params.source === undefined) {
+      throw new Error(`[BB_MB] ROBOT NOT READY: Missing required configuration (length, mult, mult2, source). Received: ${JSON.stringify(params)}`);
+    }
+    this.length = params.length;
+    this.source = params.source;
+    this.mult1 = params.mult;
+    this.mult2 = params.mult2;
   }
 
   public validate(): boolean {
     if (this.length <= 0) return false;
     if (this.mult1 <= 0 || this.mult2 <= 0) return false;
+    if (!this.source) return false;
     return true;
   }
 

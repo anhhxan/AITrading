@@ -92,19 +92,25 @@ export class StateMachineEngine implements IEngine {
   private async handleCandleClosed(event: any) {
     const robotId = event.robotId;
     const currentState = this.states.get(robotId);
+    console.log(`[StateMachineEngine] handleCandleClosed - robotId: ${robotId}, currentState: ${currentState}`);
     
     if (currentState === RobotState.WAIT_RETRACEMENT) {
       const activeSignal = this.activeSignals.get(robotId);
+      console.log(`[StateMachineEngine] activeSignal:`, activeSignal ? 'EXISTS' : 'NULL');
       if (!activeSignal) return;
 
       const currentPrice = event.candle.close;
       const trigger = activeSignal.entryTrigger;
+      
+      console.log(`[StateMachineEngine] Evaluating Trigger: currentPrice=${currentPrice}, trigger=${JSON.stringify(trigger)}`);
 
       // 1. Check Trigger FIRST
       let isTriggered = false;
       if (trigger && currentPrice >= trigger.lower && currentPrice <= trigger.upper) {
         isTriggered = true;
       }
+      
+      console.log(`[StateMachineEngine] isTriggered: ${isTriggered}`);
 
       if (isTriggered) {
         this.states.set(robotId, RobotState.READY_TO_ENTER);

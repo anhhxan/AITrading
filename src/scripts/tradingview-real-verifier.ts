@@ -44,7 +44,7 @@ async function bootstrap() {
 
     strategyEngine.registerRobot('RobotXAU', 'BB_Strategy', { retracementZonePercent: 20, timeoutCandles: 3 });
     stateMachineEngine.registerRobot('RobotXAU');
-    riskEngine.registerRobotConfig('RobotXAU', { symbol: 'XAUUSD', accountBalance: 10000, riskPercent: 2, maxAllocationPercent: 50, leverage: 1 });
+    riskEngine.registerRobotConfig('RobotXAU', { tradingViewSymbol: 'XAUUSD', executionSymbol: 'XAUUSD', timeframe: '15m', accountBalance: 10000, riskPercent: 2, maxAllocationPercent: 50, leverage: 1 });
 
     coreEventBus.subscribe('CANDLE_CLOSED', async (e) => appendDump({ type: 'CORE_EVENT', eventType: 'CANDLE_CLOSED', processedAt: Date.now(), event: e }));
     coreEventBus.subscribe('INDICATOR_UPDATED', async (e) => appendDump({ type: 'CORE_EVENT', eventType: 'INDICATOR_UPDATED', processedAt: Date.now(), event: e }));

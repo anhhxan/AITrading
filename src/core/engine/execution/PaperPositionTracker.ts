@@ -9,10 +9,24 @@ export class PaperPositionTracker implements IEngine {
   private status: 'READY' | 'STARTING' | 'ERROR' | 'STOPPED' = 'STOPPED';
   
   private unsubs: (() => void)[] = [];
+  
+  // IMMUTABLE SNAPSHOT STATE (Position Context)
+  private positionContexts: Map<string, any> = new Map();
 
   public async initialize(): Promise<void> {
     this.status = 'STARTING';
     
+    this.unsubs.push(coreEventBus.subscribe('POSITION_OPENED_EVENT', async (e: any) => {
+       // Save context securely by robot_id (or position id if we had it, but Paper limits to 1 per robot for now)
+       this.positionContexts.set(e.robotId, {
+         executionSymbol: e.symbol,
+         tradingViewSymbol: e.tradingViewSymbol,
+         timeframe: e.timeframe,
+         strategyId: e.strategyId,
+         indicatorSnapshot: e.indicatorSnapshot
+       });
+    }));
+
     this.unsubs.push(coreEventBus.subscribe('CANDLE_CLOSED', async (e: CandleClosedEvent) => {
        await this.handleCandleClosed(e);
     }));
@@ -94,6 +108,15 @@ export class PaperPositionTracker implements IEngine {
         return; // Stop here, idempotency is preserved since position remains
       }
 
+      // Restore snapshot context securely
+      const ctx = this.positionContexts.get(robotId) || {
+         executionSymbol: position.symbol || 'unknown_legacy',
+         tradingViewSymbol: 'unknown_legacy',
+         timeframe: 'unknown',
+         strategyId: 'unknown_legacy',
+         indicatorSnapshot: {}
+      };
+
       // B. Insert trade_history
       const { error: histErr } = await supabase
         .from('trade_history')
@@ -107,7 +130,12 @@ export class PaperPositionTracker implements IEngine {
           pnl: realizedPnl,
           fee: 0,
           slippage: 0,
-          reason: closeReason
+          reason: closeReason,
+          execution_symbol: ctx.executionSymbol,
+          trading_view_symbol: ctx.tradingViewSymbol,
+          timeframe: ctx.timeframe,
+          strategy_id: ctx.strategyId,
+          indicator_snapshot: ctx.indicatorSnapshot
         });
 
       if (histErr) {

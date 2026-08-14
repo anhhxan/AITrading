@@ -9,7 +9,9 @@ export interface TradePlanEvent extends BaseEvent {
   robotId: string;
   strategyId: string;
   strategyVersion: string;
-  symbol: string;
+  tradingViewSymbol: string;
+  executionSymbol: string;
+  timeframe: string;
   direction: 'LONG' | 'SHORT';
   
   triggerPrice: number;
@@ -39,7 +41,9 @@ export interface RiskRejectedEvent extends BaseEvent {
 }
 
 export interface RiskConfig {
-  symbol: string;
+  tradingViewSymbol: string;
+  executionSymbol: string;
+  timeframe: string;
   accountBalance: number;
   riskPercent: number;
   maxAllocationPercent: number;
@@ -96,7 +100,7 @@ export class RiskEngine implements IEngine {
     const config = this.robotConfigs.get(robotId);
     if (!config) return reject('MISSING_CONFIG');
     
-    if (!config.symbol || !config.accountBalance || config.accountBalance <= 0 || 
+    if (!config.tradingViewSymbol || !config.executionSymbol || !config.accountBalance || config.accountBalance <= 0 || 
         !config.riskPercent || config.riskPercent <= 0 || config.riskPercent > 1 ||
         !config.maxAllocationPercent || config.leverage !== 1) {
       return reject('INVALID_CONFIG');
@@ -153,7 +157,9 @@ export class RiskEngine implements IEngine {
     const tradePlan = EventFactory.createEvent('TRADE_PLAN_EVENT', robotId, 1, trace, {
       strategyId: activeSignal.strategyId,
       strategyVersion: activeSignal.strategyVersion,
-      symbol: config.symbol,
+      tradingViewSymbol: config.tradingViewSymbol,
+      executionSymbol: config.executionSymbol,
+      timeframe: config.timeframe,
       direction: direction,
       triggerPrice: entry,
       entryReferencePrice: entry,

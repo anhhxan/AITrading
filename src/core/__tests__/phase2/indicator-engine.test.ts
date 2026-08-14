@@ -65,7 +65,7 @@ describe('Phase 2: IndicatorEngine Contract', () => {
 
     engine.registerRobot('ROBOT_E', [
       { name: 'BB_MB', params: { length: 2, mult: 2.0 } }, // ready after 2 candles
-      { name: 'BROKEN', params: {} }
+      { name: 'BROKEN', params: { length: 20, source: 'close', mult: 2.0, mult2: 1.0 } }
     ]);
 
     let emitCount = 0;

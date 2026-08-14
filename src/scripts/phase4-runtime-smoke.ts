@@ -13,7 +13,7 @@ async function runPhase4SmokeTest() {
   
   const robotId = 'RobotSmoke';
   const config: RiskConfig = {
-    symbol: 'BTCUSDT',
+    tradingViewSymbol: 'BTCUSDT', executionSymbol: 'BTCUSDT', timeframe: '15m',
     accountBalance: 10000,
     riskPercent: 0.01,
     maxAllocationPercent: 0.20,

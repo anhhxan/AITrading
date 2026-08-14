@@ -1,0 +1,4 @@
+BEGIN;
+ALTER TABLE public.trade_history
+ADD COLUMN IF NOT EXISTS symbol VARCHAR(50);
+COMMIT;

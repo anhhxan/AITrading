@@ -10,7 +10,9 @@ describe('Phase 4A: Risk Engine (TDD)', () => {
   const robotId = 'RobotR1';
 
   const defaultRiskConfig: RiskConfig = {
-    symbol: 'BTCUSDT',
+    tradingViewSymbol: 'BTCUSDT',
+    executionSymbol: 'BTCUSDT',
+    timeframe: '15m',
     accountBalance: 10000,
     riskPercent: 0.01,
     maxAllocationPercent: 0.20,
