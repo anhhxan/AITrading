@@ -91,6 +91,20 @@ async function rehydrateContext(robotId: string) {
   }
 }
 
+export async function GET(req: NextRequest) {
+    const authHeader = req.headers.get('authorization');
+    const expectedSecret = process.env.TV_WEBHOOK_SECRET;
+    const authVal = authHeader ? authHeader.replace('Bearer ', '') : '';
+
+    return NextResponse.json({
+        envExists: !!expectedSecret,
+        envLength: expectedSecret ? expectedSecret.length : 0,
+        authReceived: !!authHeader,
+        authLength: authVal.length,
+        authMatchesEnv: expectedSecret && authVal === expectedSecret
+    }, { status: 200 });
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ robotId: string }> | { robotId: string } }) {
     // Resolve params for Next.js 15+ compatibility
     const resolvedParams = await params;
