@@ -24,7 +24,7 @@ describe('Phase 2: Indicator Warmup Test', () => {
     });
 
     // Register Robot with BB_MB (length: 20)
-    engine.registerRobot('RobotW1', [{ name: 'BB_MB', params: { length: 20, mult: 2.0, mult2: 1.0 } }]);
+    engine.registerRobot('RobotW1', [{ name: 'BB_MB', params: {  length: 20, mult: 2.0, mult2: 1.0, source: 'close'  } }]);
 
     // Emit 19 candles
     for (let i = 1; i <= 19; i++) {

@@ -18,7 +18,7 @@ describe('Phase 2: BB_MB Determinism', () => {
     
     const runCalculation = (): string => {
       const bb = PluginLoader.loadIndicator('BB_MB');
-      bb.init({ length: 20, mult: 2.0 });
+      bb.init({  length: 20, mult: 2.0, mult2: 1.0, source: 'close'  });
       
       let lastSnapshot = null;
       for (let i = 1; i <= 25; i++) {

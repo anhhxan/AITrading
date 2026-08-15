@@ -23,7 +23,7 @@ describe('Phase 2: TradingView Compare (Golden Dataset)', () => {
     
     // 2. Khởi tạo Indicator
     const indicator = new BB_MB_Indicator();
-    indicator.init({ length: 20, mult: 2.0, mult2: 1.0 });
+    indicator.init({  length: 20, mult: 2.0, mult2: 1.0, source: 'close'  });
 
     const MAX_ABSOLUTE_ERROR = 0.0001;
     const MAX_RELATIVE_ERROR = 0.0001; // 0.01%

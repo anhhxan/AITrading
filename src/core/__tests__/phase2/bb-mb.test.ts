@@ -14,7 +14,7 @@ const createMockCandle = (price: number): Candle => ({
 describe('Phase 2: BB_MB Plugin Warmup & Logic', () => {
   it('Test B: Warmup Logic (NOT_READY -> READY)', () => {
     const bb = PluginLoader.loadIndicator('BB_MB');
-    bb.init({ length: 20, mult: 2.0 });
+    bb.init({  length: 20, mult: 2.0, mult2: 1.0, source: 'close'  });
 
     // 1 to 19 candles
     for (let i = 1; i <= 19; i++) {

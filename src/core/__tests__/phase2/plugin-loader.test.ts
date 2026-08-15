@@ -17,17 +17,17 @@ describe('Phase 2: Plugin Loader Lifecycle', () => {
     expect(() => PluginLoader.loadAndInitializeIndicator('INVALID', {})).toThrow();
 
     // Valid parameters
-    const bb1 = PluginLoader.loadAndInitializeIndicator('BB_MB', { length: 20, mult: 2.0 });
+    const bb1 = PluginLoader.loadAndInitializeIndicator('BB_MB', {  length: 20, mult: 2.0, mult2: 1.0, source: 'close'  });
     expect(bb1.validate()).toBe(true);
 
     // Invalid parameters - should throw during initialization
-    expect(() => PluginLoader.loadAndInitializeIndicator('BB_MB', { length: -1 })).toThrow(/configuration invalid/);
-    expect(() => PluginLoader.loadAndInitializeIndicator('BB_MB', { mult: 0 })).toThrow(/configuration invalid/);
+    expect(() => PluginLoader.loadAndInitializeIndicator('BB_MB', { length: -1 })).toThrow(/ROBOT NOT READY/);
+    expect(() => PluginLoader.loadAndInitializeIndicator('BB_MB', { mult: 0 })).toThrow(/ROBOT NOT READY/);
   });
 
   it('Test A2: Warmup via PluginLoader', () => {
     const bb = PluginLoader.loadIndicator('BB_MB');
-    bb.init({ length: 20, mult: 2.0 });
+    bb.init({  length: 20, mult: 2.0, mult2: 1.0, source: 'close'  });
     expect(bb.validate()).toBe(true);
 
     const historicalCandles: Candle[] = [];

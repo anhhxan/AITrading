@@ -26,7 +26,7 @@ describe('Phase 2: IndicatorEngine Contract', () => {
 
   it('Test E: IndicatorEngine emits INDICATOR_UPDATED_EVENT only when ALL ready', async () => {
     // We register BB_MB which requires 20 candles to be ready
-    engine.registerRobot('ROBOT_E', [{ name: 'BB_MB', params: { length: 20, mult: 2.0 } }]);
+    engine.registerRobot('ROBOT_E', [{ name: 'BB_MB', params: {  length: 20, mult: 2.0, mult2: 1.0, source: 'close'  } }]);
 
     let emitCount = 0;
     coreEventBus.subscribe('INDICATOR_UPDATED', async () => { emitCount++; });
@@ -64,7 +64,7 @@ describe('Phase 2: IndicatorEngine Contract', () => {
     };
 
     engine.registerRobot('ROBOT_E', [
-      { name: 'BB_MB', params: { length: 2, mult: 2.0 } }, // ready after 2 candles
+      { name: 'BB_MB', params: {  length: 2, mult: 2.0, mult2: 1.0, source: 'close'  } }, // ready after 2 candles
       { name: 'BROKEN', params: { length: 20, source: 'close', mult: 2.0, mult2: 1.0 } }
     ]);
 
@@ -89,7 +89,7 @@ describe('Phase 2: IndicatorEngine Contract', () => {
   });
 
   it('Test G: IndicatorEngine Trace and Sequence Inheritance', async () => {
-    engine.registerRobot('ROBOT_G', [{ name: 'BB_MB', params: { length: 2, mult: 2.0 } }]);
+    engine.registerRobot('ROBOT_G', [{ name: 'BB_MB', params: {  length: 2, mult: 2.0, mult2: 1.0, source: 'close'  } }]);
 
     let capturedIndicator: any = null;
     coreEventBus.subscribe('INDICATOR_UPDATED', async (e) => {
@@ -112,7 +112,7 @@ describe('Phase 2: IndicatorEngine Contract', () => {
   });
 
   it('Test H: Rapid Publish Regression - Causal Pipeline Ordering', async () => {
-    engine.registerRobot('ROBOT_H', [{ name: 'BB_MB', params: { length: 2, mult: 2.0 } }]);
+    engine.registerRobot('ROBOT_H', [{ name: 'BB_MB', params: {  length: 2, mult: 2.0, mult2: 1.0, source: 'close'  } }]);
 
     const processingOrder: string[] = [];
 

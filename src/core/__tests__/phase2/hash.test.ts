@@ -17,7 +17,7 @@ describe('Phase 2: Indicator Hash Test', () => {
     // Hàm lấy Hash cuối cùng của indicator sau khi đẩy 30 nến
     const getFinalHash = () => {
       const indicator = new BB_MB_Indicator();
-      indicator.init({ length: 20, mult: 2.0, mult2: 1.0 });
+      indicator.init({  length: 20, mult: 2.0, mult2: 1.0, source: 'close'  });
       
       let finalSnapshot: any = {};
       for (const candle of mockCandles) {

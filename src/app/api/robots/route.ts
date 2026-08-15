@@ -113,7 +113,8 @@ export async function POST(request: Request) {
         risk_profile: resolvedRiskProfile,
         entry_profile: resolvedEntryProfile,
         exit_profile: resolvedExitProfile,
-        notification_profile: resolvedNotificationProfile
+        notification_profile: resolvedNotificationProfile,
+        worker_id: process.env.DEFAULT_WORKER_ID || 'local-pc-01'
       })
       .select('*')
       .single()

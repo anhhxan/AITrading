@@ -115,7 +115,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     const expectedSecret = process.env.TV_WEBHOOK_SECRET;
     if (!authHeader || !expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
         console.error(`[Webhook Auth Failed] Expected: ${expectedSecret}, Got: ${authHeader}`);
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        const authVal = authHeader ? authHeader.replace('Bearer ', '') : '';
+        return NextResponse.json({ 
+            error: 'Unauthorized',
+            debug: {
+                envExists: !!expectedSecret,
+                envLength: expectedSecret ? expectedSecret.length : 0,
+                authReceived: !!authHeader,
+                authLength: authVal.length,
+                authMatchesEnv: false
+            }
+        }, { status: 401 });
     }
     
     let payload;
