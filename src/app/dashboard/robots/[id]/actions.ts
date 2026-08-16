@@ -90,9 +90,23 @@ export async function toggleTradingAction(robotId: string, enabled: boolean) {
 
   if (!user) return { error: 'Not authenticated' }
 
+  const updateData: any = { trading_enabled: enabled }
+
+  if (enabled) {
+    const { data: robot } = await supabase.from('robots').select('status').eq('id', robotId).single()
+    if (robot && robot.status === 'CREATED') {
+      updateData.status = 'RUNNING'
+    }
+
+    const { data: positions } = await supabase.from('active_positions').select('id').eq('robot_id', robotId)
+    if (!positions || positions.length === 0) {
+      updateData.current_state = 'WAIT_SIGNAL'
+    }
+  }
+
   const { error } = await supabase
     .from('robots')
-    .update({ trading_enabled: enabled })
+    .update(updateData)
     .eq('id', robotId)
 
   if (error) {
