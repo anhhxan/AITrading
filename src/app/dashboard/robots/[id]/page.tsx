@@ -205,7 +205,7 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                 </div>
                 <div>
                   <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">Timeframe</div>
-                  <div className="font-mono font-bold text-slate-900">{robot.timeframe}M</div>
+                  <div className="font-mono font-bold text-slate-900 uppercase">{robot.timeframe}</div>
                 </div>
                 <div>
                   <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">Strategy</div>

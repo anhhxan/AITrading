@@ -121,7 +121,7 @@ export class TradingViewAdapter {
     const validationErrors: string[] = [];
 
     if (payload.tvSymbol !== expectedConfig.canonicalSymbol) validationErrors.push('Symbol mismatch');
-    if (canonicalTF !== expectedConfig.timeframe) validationErrors.push('Timeframe mismatch');
+    if (canonicalTF.toLowerCase() !== expectedConfig.timeframe.toLowerCase()) validationErrors.push('Timeframe mismatch');
     if (payload.indicator.length !== expectedConfig.indicator.length) validationErrors.push('Length mismatch');
     if (payload.indicator.source !== expectedConfig.indicator.source) validationErrors.push('Source mismatch');
     if (payload.indicator.mult !== expectedConfig.indicator.mult) validationErrors.push('Mult mismatch');
