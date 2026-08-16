@@ -80,6 +80,11 @@ export class StateMachineEngine implements IEngine {
     const robotId = event.robotId;
     const currentState = this.states.get(robotId) || RobotState.WAIT_SIGNAL;
     
+    if (currentState === RobotState.POSITION_OPEN) {
+      console.log(`[StateMachineEngine] POSITION_ALREADY_OPEN for robot ${robotId}: Ignoring new signal.`);
+      return;
+    }
+    
     // Switch to WAIT_RETRACEMENT and Override any existing signal
     if (currentState === RobotState.WAIT_SIGNAL || currentState === RobotState.WAIT_RETRACEMENT) {
       this.states.set(robotId, RobotState.WAIT_RETRACEMENT);

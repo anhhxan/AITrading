@@ -59,13 +59,17 @@ async function rehydrateContext(robotId: string) {
   if (!(stateMachine as any).states.has(robotId)) {
     stateMachine.registerRobot(robotId);
   }
+  const positionAllocationPercent = configData.position_allocation_percent || configData.robots?.position_allocation_percent || configData.risk_profile?.position_allocation_percent;
+  if (!positionAllocationPercent || positionAllocationPercent <= 0 || positionAllocationPercent > 100) {
+    throw new Error('ROBOT_NOT_READY: Missing or invalid position allocation percent');
+  }
+
   riskEngine.registerRobotConfig(robotId, {
     tradingViewSymbol: configData.robots.trading_view_symbol,
     executionSymbol: configData.robots.execution_symbol,
     timeframe: configData.robots.timeframe,
     accountBalance: configData.robots.paper_balance,
-    riskPercent: configData.robots.risk_percent || 1,
-    maxAllocationPercent: configData.robots.max_allocation_percent || 100,
+    positionAllocationPercent: positionAllocationPercent,
     leverage: configData.robots.leverage || 1
   });
 
@@ -198,6 +202,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     } catch (err: any) {
         console.error('[TV WEBHOOK] Execution Error:', err);
         await supabase.from('robot_commands').update({ status: 'FAILED', result: err.message }).eq('command_id', deterministicCommandId);
+        
+        if (err.message && err.message.includes('ROBOT_NOT_READY')) {
+            return NextResponse.json({ error: err.message }, { status: 400 });
+        }
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

@@ -41,8 +41,8 @@ export async function setupPOCEngines() {
     executionSymbol: 'XAUUSD',
     timeframe: '15m',
     accountBalance: 10000,
-    riskPercent: 0.01, // 1%
-    maxAllocationPercent: 0.20,
+    positionAllocationPercent: 20, // 1%
+    
     leverage: 1
   };
   riskEngine.registerRobotConfig('RobotXAU', riskConfig);

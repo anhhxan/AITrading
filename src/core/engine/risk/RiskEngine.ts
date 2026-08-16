@@ -20,9 +20,8 @@ export interface TradePlanEvent extends BaseEvent {
   takeProfit: number;
   
   accountBalance: number;
-  riskPercent: number;
-  riskAmount: number;
-  maxAllocationPercent: number;
+  positionAllocationPercent: number;
+  positionValue: number;
   positionSize: number;
   leverage: number;
   riskRewardRatio: number;
@@ -45,8 +44,7 @@ export interface RiskConfig {
   executionSymbol: string;
   timeframe: string;
   accountBalance: number;
-  riskPercent: number;
-  maxAllocationPercent: number;
+  positionAllocationPercent: number;
   leverage: number;
 }
 
@@ -101,8 +99,8 @@ export class RiskEngine implements IEngine {
     if (!config) return reject('MISSING_CONFIG');
     
     if (!config.tradingViewSymbol || !config.executionSymbol || !config.accountBalance || config.accountBalance <= 0 || 
-        !config.riskPercent || config.riskPercent <= 0 || config.riskPercent > 1 ||
-        !config.maxAllocationPercent || config.leverage !== 1) {
+        !config.positionAllocationPercent || config.positionAllocationPercent <= 0 || config.positionAllocationPercent > 100 ||
+        !config.leverage || config.leverage <= 0) {
       return reject('INVALID_CONFIG');
     }
 
@@ -134,8 +132,7 @@ export class RiskEngine implements IEngine {
       entryReferencePrice: entry,
       stopLoss: sl,
       takeProfit: tp,
-      riskPercent: config.riskPercent,
-      maxAllocationPercent: config.maxAllocationPercent,
+      positionAllocationPercent: config.positionAllocationPercent,
       leverage: config.leverage
     });
 
@@ -144,7 +141,7 @@ export class RiskEngine implements IEngine {
     }
 
     const positionSize = result.positionSize;
-    const riskAmount = result.riskAmount;
+    const positionValue = result.riskAmount; // mapped inside RiskCalculator
     const rr = result.riskRewardRatio;
 
     const trace = EventFactory.createTrace(
@@ -166,13 +163,23 @@ export class RiskEngine implements IEngine {
       stopLoss: sl,
       takeProfit: tp,
       accountBalance: config.accountBalance,
-      riskPercent: config.riskPercent,
-      riskAmount: riskAmount,
-      maxAllocationPercent: config.maxAllocationPercent,
+      positionAllocationPercent: config.positionAllocationPercent,
+      positionValue: positionValue,
       positionSize: positionSize,
       leverage: config.leverage,
       riskRewardRatio: rr,
-      indicatorReference: indicatorRef
+      indicatorReference: {
+        ...indicatorRef,
+        snapshot: {
+          ...indicatorRef.snapshot,
+          sizingContext: {
+            positionAllocationPercent: config.positionAllocationPercent,
+            positionValue: positionValue,
+            quantity: positionSize,
+            leverage: config.leverage
+          }
+        }
+      }
     });
 
     console.log('[RiskEngine] Emitting TRADE_PLAN_EVENT for', robotId, 'posSize:', positionSize);

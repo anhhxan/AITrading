@@ -44,7 +44,7 @@ export default function CreateRobotForm({ accounts }: { accounts: { id: string, 
       },
       strategyProfile: { type: 'REVERSAL' },
       riskProfile: {
-        max_position_size: parseFloat(formData.get('maxPositionSize') as string || '100'),
+        position_allocation_percent: parseFloat(formData.get('positionAllocationPercent') as string || '20'),
         stop_loss_pct: parseFloat(formData.get('stopLossPct') as string || '2.0')
       },
       entryProfile: { mode: 'MARKET' },
@@ -273,14 +273,15 @@ export default function CreateRobotForm({ accounts }: { accounts: { id: string, 
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Max Position Size ($)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Position Allocation (%)</label>
                 <input 
                   type="number" 
-                  name="maxPositionSize" 
+                  name="positionAllocationPercent" 
                   required
-                  min="1"
-                  step="0.01"
-                  defaultValue="100"
+                  min="0.1"
+                  max="100"
+                  step="0.1"
+                  defaultValue="20"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none"
                 />
               </div>

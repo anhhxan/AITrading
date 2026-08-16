@@ -4,9 +4,9 @@ export interface RiskCalculationParams {
   entryReferencePrice: number | null | undefined;
   stopLoss: number | null | undefined;
   takeProfit: number | null | undefined;
-  riskPercent: number;
-  maxAllocationPercent: number;
-  leverage: number;
+  riskPercent?: number; // legacy
+  positionAllocationPercent: number;
+  leverage?: number;
 }
 
 export interface RiskCalculationResult {
@@ -29,9 +29,8 @@ export function calculateRiskPreview(params: RiskCalculationParams): RiskCalcula
     entryReferencePrice: entry,
     stopLoss: sl,
     takeProfit: tp,
-    riskPercent,
-    maxAllocationPercent,
-    leverage
+    positionAllocationPercent,
+    leverage = 1
   } = params;
 
   const reject = (reason: string): RiskCalculationResult => ({
@@ -42,8 +41,7 @@ export function calculateRiskPreview(params: RiskCalculationParams): RiskCalcula
   });
 
   if (!accountBalance || accountBalance <= 0 ||
-      !riskPercent || riskPercent <= 0 || riskPercent > 1 ||
-      !maxAllocationPercent || leverage !== 1) {
+      !positionAllocationPercent || positionAllocationPercent <= 0 || positionAllocationPercent > 100) {
     return reject('INVALID_CONFIG');
   }
 
@@ -64,19 +62,14 @@ export function calculateRiskPreview(params: RiskCalculationParams): RiskCalcula
 
   if (risk <= 0 || reward <= 0) return reject('INVALID_RISK_REWARD');
 
-  const riskAmount = accountBalance * riskPercent;
-  let positionSize = riskAmount / risk;
+  const positionValue = accountBalance * (positionAllocationPercent / 100);
+  let positionSize = (positionValue * leverage) / entry;
 
   if (!positionSize || positionSize <= 0 || !isFinite(positionSize) || isNaN(positionSize)) {
     return reject('INVALID_POSITION_SIZE');
   }
 
-  const maxNotional = accountBalance * maxAllocationPercent;
   const notional = positionSize * entry;
-
-  if (notional > maxNotional) {
-    positionSize = maxNotional / entry;
-  }
 
   const rr = reward / risk;
 
@@ -85,10 +78,10 @@ export function calculateRiskPreview(params: RiskCalculationParams): RiskCalcula
     risk,
     reward,
     riskRewardRatio: rr,
-    riskAmount,
+    riskAmount: positionValue, // Map riskAmount to positionValue for legacy
     riskPerUnit: risk,
     positionSize,
-    maxNotional,
+    maxNotional: positionValue,
     notional: positionSize * entry
   };
 }

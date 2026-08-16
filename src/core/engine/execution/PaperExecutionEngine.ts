@@ -63,6 +63,22 @@ export class PaperExecutionEngine implements IEngine {
         return;
       }
 
+      // 1.5 Guard: SINGLE OPEN POSITION PER ROBOT
+      const { data: existingPos, error: checkErr } = await supabase
+        .from('active_positions')
+        .select('id')
+        .eq('robot_id', event.robotId)
+        .limit(1);
+
+      if (checkErr) {
+        console.error('[PaperExecutionEngine] ACTIVE POSITIONS CHECK ERROR:', checkErr.message);
+        return;
+      }
+      if (existingPos && existingPos.length > 0) {
+        console.log(`[PaperExecutionEngine] REJECTED: POSITION_ALREADY_OPEN for robot ${event.robotId}`);
+        return;
+      }
+
       // 2. Insert execution_intents
       // Idempotency uses (robot_id, signal_id) which we map to event.eventId
       const clientOrderId = `PAPER-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;

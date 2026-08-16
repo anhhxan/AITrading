@@ -14,8 +14,8 @@ describe('Phase 4A: Risk Engine (TDD)', () => {
     executionSymbol: 'BTCUSDT',
     timeframe: '15m',
     accountBalance: 10000,
-    riskPercent: 0.01,
-    maxAllocationPercent: 0.20,
+    positionAllocationPercent: 20,
+    
     leverage: 1
   };
 
