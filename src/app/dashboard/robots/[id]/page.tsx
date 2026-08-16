@@ -109,8 +109,8 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                 <p className="font-semibold text-blue-600">${Number(robot.paper_balance || 10000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">Trading Enabled</p>
-                <p className="font-semibold text-slate-900">{robot.trading_enabled ? <span className="text-emerald-600">ON</span> : <span className="text-red-500">OFF</span>}</p>
+                <p className="text-xs text-slate-500 mb-1">Trading Status</p>
+                <p className="font-semibold text-slate-900">{robot.trading_enabled ? <span className="text-emerald-600">ON</span> : <span className="text-slate-500">PAUSED</span>}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">TradingView Symbol</p>

@@ -17,8 +17,6 @@ export default async function RobotsPage() {
     switch (status) {
       case 'RUNNING':
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">RUNNING</span>;
-      case 'PAUSED':
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">PAUSED</span>;
       case 'STOPPED':
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">STOPPED</span>;
       case 'ARCHIVED':
@@ -26,6 +24,13 @@ export default async function RobotsPage() {
       default:
         return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{status}</span>;
     }
+  };
+
+  const getTradingBadge = (tradingEnabled: boolean) => {
+    if (tradingEnabled) {
+      return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">ON</span>;
+    }
+    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">PAUSED</span>;
   };
 
   const getHeartbeatStatus = (lastHeartbeat: string | null) => {
@@ -79,6 +84,7 @@ export default async function RobotsPage() {
                 <tr>
                   <th className="px-6 py-4 font-medium">Robot Name & Slug</th>
                   <th className="px-6 py-4 font-medium">Lifecycle</th>
+                  <th className="px-6 py-4 font-medium">Trading</th>
                   <th className="px-6 py-4 font-medium">Current State</th>
                   <th className="px-6 py-4 font-medium">Account</th>
                   <th className="px-6 py-4 font-medium">Heartbeat</th>
@@ -105,6 +111,9 @@ export default async function RobotsPage() {
                     </td>
                     <td className="px-6 py-4">
                       {getStatusBadge(robot.status)}
+                    </td>
+                    <td className="px-6 py-4">
+                      {getTradingBadge(robot.trading_enabled)}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
