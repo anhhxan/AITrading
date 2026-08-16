@@ -194,7 +194,7 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
               </h3>
             </div>
             <div className="p-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
                 <div>
                   <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">TradingView Symbol</div>
                   <div className="font-mono font-bold text-slate-900">{robot.trading_view_symbol}</div>
@@ -210,6 +210,14 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                 <div>
                   <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">Strategy</div>
                   <div className="font-mono font-bold text-slate-900">{configs?.[0]?.strategy_profile?.type || 'N/A'}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">Position Allocation</div>
+                  <div className="font-mono font-bold text-emerald-600">
+                    {configs?.[0]?.risk_profile?.position_allocation_percent 
+                      ? `${configs[0].risk_profile.position_allocation_percent}% of balance`
+                      : <span className="text-red-500 font-semibold">NOT CONFIGURED</span>}
+                  </div>
                 </div>
               </div>
               <div className="mt-6 pt-6 border-t border-slate-100">
