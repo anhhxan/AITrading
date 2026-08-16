@@ -83,3 +83,24 @@ export async function applyRobotConfigAction(robotId: string, configId: string) 
   revalidatePath(`/dashboard/robots/${robotId}`)
   return { success: true }
 }
+
+export async function toggleTradingAction(robotId: string, enabled: boolean) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) return { error: 'Not authenticated' }
+
+  const { error } = await supabase
+    .from('robots')
+    .update({ trading_enabled: enabled })
+    .eq('id', robotId)
+
+  if (error) {
+    console.error('Toggle trading error:', error)
+    return { error: error.message }
+  }
+
+  revalidatePath(`/dashboard/robots`)
+  revalidatePath(`/dashboard/robots/${robotId}`)
+  return { success: true }
+}

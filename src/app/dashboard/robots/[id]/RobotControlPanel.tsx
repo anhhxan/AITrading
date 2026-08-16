@@ -1,19 +1,21 @@
 'use client'
 
 import { useState } from 'react'
-import { Play, Square, Archive, Check } from 'lucide-react'
-import { sendRobotCommand, archiveRobotAction, applyRobotConfigAction } from './actions'
+import { Play, Square, Archive, Check, Zap, Pause } from 'lucide-react'
+import { sendRobotCommand, archiveRobotAction, applyRobotConfigAction, toggleTradingAction } from './actions'
 
 type ActionType = 'CONTROLS' | 'APPLY_CONFIG'
 
 export default function RobotControlPanel({ 
   robotId, 
   currentStatus, 
+  tradingEnabled,
   configId, 
   action 
 }: { 
   robotId: string, 
   currentStatus?: string, 
+  tradingEnabled?: boolean,
   configId?: string, 
   action: ActionType 
 }) {
@@ -33,6 +35,14 @@ export default function RobotControlPanel({
     setLoading(true)
     setError('')
     const result = await archiveRobotAction(robotId)
+    if (result.error) setError(result.error)
+    setLoading(false)
+  }
+
+  const handleToggleTrading = async (enabled: boolean) => {
+    setLoading(true)
+    setError('')
+    const result = await toggleTradingAction(robotId, enabled)
     if (result.error) setError(result.error)
     setLoading(false)
   }
@@ -73,7 +83,7 @@ export default function RobotControlPanel({
           className="flex flex-col items-center justify-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-green-300 hover:text-green-600 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-inherit"
         >
           <Play className="w-5 h-5 mb-1" />
-          <span className="text-sm font-medium">Start</span>
+          <span className="text-sm font-medium">Start Lifecycle</span>
         </button>
         
         <button
@@ -82,7 +92,27 @@ export default function RobotControlPanel({
           className="flex flex-col items-center justify-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-orange-300 hover:text-orange-600 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-inherit"
         >
           <Square className="w-5 h-5 mb-1" />
-          <span className="text-sm font-medium">Stop</span>
+          <span className="text-sm font-medium">Stop Lifecycle</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mt-4">
+        <button
+          onClick={() => handleToggleTrading(true)}
+          disabled={loading || tradingEnabled || currentStatus === 'ARCHIVED'}
+          className="flex flex-col items-center justify-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-emerald-300 hover:text-emerald-600 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-inherit"
+        >
+          <Zap className="w-5 h-5 mb-1" />
+          <span className="text-sm font-medium text-center">Activate Trading</span>
+        </button>
+        
+        <button
+          onClick={() => handleToggleTrading(false)}
+          disabled={loading || !tradingEnabled || currentStatus === 'ARCHIVED'}
+          className="flex flex-col items-center justify-center p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 hover:text-slate-600 transition-colors disabled:opacity-50 disabled:hover:bg-white disabled:hover:border-slate-200 disabled:hover:text-inherit"
+        >
+          <Pause className="w-5 h-5 mb-1" />
+          <span className="text-sm font-medium text-center">Pause Trading</span>
         </button>
       </div>
 

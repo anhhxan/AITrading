@@ -329,7 +329,12 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
         <div className="md:col-span-1 space-y-6">
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
             <h3 className="font-semibold text-slate-900 mb-4">Control Panel</h3>
-            <RobotControlPanel robotId={robot.id} currentStatus={robot.status} action="CONTROLS" />
+            <RobotControlPanel 
+              robotId={robot.id} 
+              currentStatus={robot.status} 
+              tradingEnabled={robot.trading_enabled}
+              action="CONTROLS" 
+            />
             <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 space-y-2">
               <p><strong>Commands:</strong> START/STOP send async commands to the worker.</p>
               <p><strong>Archive:</strong> Disables the robot permanently via RPC.</p>
