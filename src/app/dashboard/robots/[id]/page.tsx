@@ -194,26 +194,26 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
               </h3>
             </div>
             <div className="p-6">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-                <div>
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">TradingView Symbol</div>
-                  <div className="font-mono font-bold text-slate-900">{robot.trading_view_symbol}</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+                <div className="min-w-0">
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">TradingView Symbol</div>
+                  <div className="font-mono font-bold text-slate-900 truncate" title={robot.trading_view_symbol}>{robot.trading_view_symbol}</div>
                 </div>
-                <div>
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">Execution Symbol</div>
-                  <div className="font-mono font-bold text-blue-600">{robot.execution_symbol}</div>
+                <div className="min-w-0">
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">Execution Symbol</div>
+                  <div className="font-mono font-bold text-blue-600 truncate" title={robot.execution_symbol}>{robot.execution_symbol}</div>
                 </div>
-                <div>
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">Timeframe</div>
-                  <div className="font-mono font-bold text-slate-900 uppercase">{robot.timeframe}</div>
+                <div className="min-w-0">
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">Timeframe</div>
+                  <div className="font-mono font-bold text-slate-900 uppercase truncate">{robot.timeframe}</div>
                 </div>
-                <div>
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">Strategy</div>
-                  <div className="font-mono font-bold text-slate-900">{configs?.[0]?.strategy_profile?.type || 'N/A'}</div>
+                <div className="min-w-0">
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">Strategy</div>
+                  <div className="font-mono font-bold text-slate-900 truncate">{configs?.[0]?.strategy_profile?.type || 'N/A'}</div>
                 </div>
-                <div>
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider">Position Allocation</div>
-                  <div className="font-mono font-bold text-emerald-600">
+                <div className="min-w-0">
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">Position Allocation</div>
+                  <div className="font-mono font-bold text-emerald-600 truncate">
                     {configs?.[0]?.risk_profile?.position_allocation_percent 
                       ? `${configs[0].risk_profile.position_allocation_percent}% of balance`
                       : <span className="text-red-500 font-semibold">NOT CONFIGURED</span>}
@@ -295,30 +295,30 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 md:grid-cols-6 gap-4 p-4 bg-slate-100 rounded-lg">
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Close</div>
-                      <div className="font-mono text-sm font-bold">{robot.notification_profile.diagnostics.last_close}</div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 p-4 bg-slate-100 rounded-lg">
+                    <div className="min-w-0">
+                      <div className="text-xs text-slate-500 mb-1 truncate">Close</div>
+                      <div className="font-mono text-sm font-bold truncate" title={String(robot.notification_profile.diagnostics.last_close)}>{robot.notification_profile.diagnostics.last_close}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Upper (B1)</div>
-                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.upper}</div>
+                    <div className="min-w-0">
+                      <div className="text-xs text-slate-500 mb-1 truncate">Upper (B1)</div>
+                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.upper)}>{robot.notification_profile.diagnostics.upper}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Upper2 (B2)</div>
-                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.upper2}</div>
+                    <div className="min-w-0">
+                      <div className="text-xs text-slate-500 mb-1 truncate">Upper2 (B2)</div>
+                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.upper2)}>{robot.notification_profile.diagnostics.upper2}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Basis</div>
-                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.basis}</div>
+                    <div className="min-w-0">
+                      <div className="text-xs text-slate-500 mb-1 truncate">Basis</div>
+                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.basis)}>{robot.notification_profile.diagnostics.basis}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Lower2 (B4)</div>
-                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.lower2}</div>
+                    <div className="min-w-0">
+                      <div className="text-xs text-slate-500 mb-1 truncate">Lower2 (B4)</div>
+                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.lower2)}>{robot.notification_profile.diagnostics.lower2}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Lower (B5)</div>
-                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.lower}</div>
+                    <div className="min-w-0">
+                      <div className="text-xs text-slate-500 mb-1 truncate">Lower (B5)</div>
+                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.lower)}>{robot.notification_profile.diagnostics.lower}</div>
                     </div>
                   </div>
                 </div>
