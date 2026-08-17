@@ -5,10 +5,11 @@ import crypto from 'crypto';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const accountId = params.id;
+    const resolvedParams = await params;
+    const accountId = resolvedParams.id;
     const supabase = getSupabaseAdmin();
     const { data: account, error } = await supabase
       .from('trading_accounts')
