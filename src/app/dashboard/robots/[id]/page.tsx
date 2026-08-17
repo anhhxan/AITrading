@@ -244,7 +244,90 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* DIAGNOSTICS BLOCK */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mt-6">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-semibold text-slate-800 flex items-center">
+                <Activity className="w-4 h-4 mr-2" />
+                Signal Diagnostics
+              </h3>
+            </div>
+            <div className="p-6">
+              {!robot.notification_profile?.diagnostics ? (
+                <div className="text-slate-500 font-medium flex items-center justify-center p-4 bg-slate-50 rounded-lg border border-slate-100">
+                  NO WEBHOOK RECEIVED
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center p-4 rounded-lg border border-slate-200 bg-slate-50">
+                    <div>
+                      <div className="text-xs text-slate-500 font-semibold mb-1 uppercase">Signal Result</div>
+                      <div className={`font-bold ${robot.notification_profile.diagnostics.last_signal_result === 'SIGNAL DETECTED' ? 'text-emerald-600' : 'text-slate-600'}`}>
+                        {robot.notification_profile.diagnostics.last_signal_result}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-slate-500 font-semibold mb-1 uppercase">Reason</div>
+                      <div className="font-medium text-slate-900">{robot.notification_profile.diagnostics.last_signal_reason}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Last Webhook At</div>
+                      <div className="font-mono text-sm font-medium">{new Date(robot.notification_profile.diagnostics.last_webhook_at).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Bar Timestamp</div>
+                      <div className="font-mono text-sm font-medium">{new Date(robot.notification_profile.diagnostics.last_bar_timestamp).toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Long Condition</div>
+                      <div className={`font-mono text-sm font-bold ${robot.notification_profile.diagnostics.long_condition === 'PASS' ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {robot.notification_profile.diagnostics.long_condition}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Short Condition</div>
+                      <div className={`font-mono text-sm font-bold ${robot.notification_profile.diagnostics.short_condition === 'PASS' ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {robot.notification_profile.diagnostics.short_condition}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 md:grid-cols-6 gap-4 p-4 bg-slate-100 rounded-lg">
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Close</div>
+                      <div className="font-mono text-sm font-bold">{robot.notification_profile.diagnostics.last_close}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Upper (B1)</div>
+                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.upper}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Upper2 (B2)</div>
+                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.upper2}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Basis</div>
+                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.basis}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Lower2 (B4)</div>
+                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.lower2}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-500 mb-1">Lower (B5)</div>
+                      <div className="font-mono text-sm">{robot.notification_profile.diagnostics.lower}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* END DIAGNOSTICS BLOCK */}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-100">
                 <h3 className="font-semibold text-slate-800 text-sm">Recent Intents</h3>

@@ -145,7 +145,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     // Verify robot exists and is RUNNING
     const { data: robot, error: robotError } = await supabase
         .from('robots')
-        .select('id, status, trading_enabled, execution_symbol')
+        .select('id, status, trading_enabled, execution_symbol, notification_profile')
         .eq('id', robotId)
         .single();
         
@@ -198,6 +198,74 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         await coreEventBus.waitForIdle(robotId);
         
         await supabase.from('robot_commands').update({ status: 'SUCCEEDED' }).eq('command_id', deterministicCommandId);
+
+        // --- DIAGNOSTICS LOGGING ---
+        try {
+            const { data: lastCmd } = await supabase
+                .from('robot_commands')
+                .select('result')
+                .eq('robot_id', robot.id)
+                .eq('command_type', 'TV_SIGNAL')
+                .eq('status', 'SUCCEEDED')
+                .neq('command_id', deterministicCommandId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+            
+            const prevClose = lastCmd?.result?.close || null;
+            let longCond = 'FAIL';
+            let shortCond = 'FAIL';
+            let signalResult = 'WEBHOOK RECEIVED - NO SIGNAL';
+            let signalReason = 'N/A';
+            
+            if (prevClose !== null) {
+                const b5 = payload.plots.lower;
+                const b4 = payload.plots.lower2;
+                const b2 = payload.plots.upper2;
+                const b1 = payload.plots.upper;
+                const currClose = payload.close;
+                
+                if (prevClose >= b5 && prevClose <= b4 && currClose > b4) {
+                    longCond = 'PASS';
+                    signalResult = 'SIGNAL DETECTED';
+                    signalReason = 'LONG condition met';
+                } else if (prevClose >= b2 && prevClose <= b1 && currClose < b2) {
+                    shortCond = 'PASS';
+                    signalResult = 'SIGNAL DETECTED';
+                    signalReason = 'SHORT condition met';
+                } else {
+                    signalReason = 'Conditions not met';
+                }
+            } else {
+                signalReason = 'Waiting for previous close data';
+            }
+            
+            const diagnostics = {
+                last_webhook_at: new Date().toISOString(),
+                last_bar_timestamp: payload.barTimestamp,
+                last_close: payload.close,
+                upper: payload.plots.upper,
+                upper2: payload.plots.upper2,
+                basis: payload.plots.basis,
+                lower2: payload.plots.lower2,
+                lower: payload.plots.lower,
+                long_condition: longCond,
+                short_condition: shortCond,
+                last_signal_result: signalResult,
+                last_signal_reason: signalReason
+            };
+            
+            await supabase.from('robots').update({
+                notification_profile: {
+                    ...(robot.notification_profile || {}),
+                    diagnostics
+                }
+            }).eq('id', robot.id);
+        } catch (diagErr) {
+            console.error('[DIAGNOSTICS ERROR]', diagErr);
+        }
+        // --- END DIAGNOSTICS ---
+
         return NextResponse.json({ status: 'OK', command_id: deterministicCommandId }, { status: 200 });
     } catch (err: any) {
         console.error('[TV WEBHOOK] Execution Error:', err);
