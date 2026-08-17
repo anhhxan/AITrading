@@ -25,6 +25,7 @@ export interface TradingViewPayload {
   low: number;
   close: number;
   volume: number;
+  previousClose?: number; // Added to hold persistent previous close
   indicator: {
     length: number;
     source: string;
@@ -157,6 +158,7 @@ export class TradingViewAdapter {
     
     const trace2 = EventFactory.createTrace(correlationId, candleEvent.eventId, 'TradingViewAdapter', seq++);
     const indicatorUpdatedEvent = EventFactory.createEvent('INDICATOR_UPDATED', robotId, activeVersion, trace2, {
+      previousClose: payload.previousClose, // FIX 3: Pass previousClose to StrategyEngine via EventBus
       indicators: {
         'BB_MB': {
           ready: true,

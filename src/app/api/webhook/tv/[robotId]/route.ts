@@ -137,6 +137,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     try {
         const rawPayloadStr = await req.text();
         payload = JSON.parse(rawPayloadStr);
+
+        // FIX 1: Normalize numeric timestamp correctly
+        if (payload.barTimestamp) {
+            const ts = Number(payload.barTimestamp);
+            if (!Number.isFinite(ts)) {
+                throw new Error("INVALID_BAR_TIMESTAMP");
+            }
+            payload.barTimestamp = ts;
+        }
     } catch(e) {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
@@ -146,7 +155,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     // Verify robot exists and is RUNNING
     const { data: robot, error: robotError } = await supabase
         .from('robots')
-        .select('id, status, trading_enabled, execution_symbol, notification_profile')
+        .select('id, status, trading_enabled, execution_symbol, notification_profile, trading_mode, trading_account_id')
         .eq('id', robotId)
         .single();
         
@@ -156,6 +165,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
 
     if (robot.status !== 'RUNNING') {
         return NextResponse.json({ error: 'ROBOT_NOT_RUNNING' }, { status: 400 });
+    }
+
+    if (robot.trading_mode === 'LIVE' && !robot.trading_account_id) {
+        return NextResponse.json({ error: 'LIVE_MODE_REQUIRES_TRADING_ACCOUNT' }, { status: 400 });
     }
 
     // Deterministic Idempotency Check
@@ -182,6 +195,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         await initEngines();
         await rehydrateContext(robotId);
         
+        // FIX 2: Fetch previous close from persistent source (robot_commands)
+        const { data: lastCmd } = await supabase
+            .from('robot_commands')
+            .select('result')
+            .eq('robot_id', robot.id)
+            .eq('command_type', 'TV_SIGNAL')
+            .eq('status', 'SUCCEEDED')
+            .neq('command_id', deterministicCommandId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+        
+        const persistentPrevClose = lastCmd?.result?.close || null;
+        payload.previousClose = persistentPrevClose; // Pass down to adapter
+
         // Pass to adapter which generates CANDLE_CLOSED and INDICATOR_UPDATED
         const result = await adapter!.handleWebhook(payload, robotId);
         
@@ -202,18 +230,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
 
         // --- DIAGNOSTICS LOGGING ---
         try {
-            const { data: lastCmd } = await supabase
-                .from('robot_commands')
-                .select('result')
-                .eq('robot_id', robot.id)
-                .eq('command_type', 'TV_SIGNAL')
-                .eq('status', 'SUCCEEDED')
-                .neq('command_id', deterministicCommandId)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
-            
-            const prevClose = lastCmd?.result?.close || null;
+            const prevClose = persistentPrevClose;
             let longCond = 'FAIL';
             let shortCond = 'FAIL';
             let signalResult = 'WEBHOOK RECEIVED - NO SIGNAL';
@@ -226,17 +243,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
                 const b1 = payload.plots.upper;
                 const currClose = payload.close;
                 
-                if (prevClose >= b5 && prevClose <= b4 && currClose > b4) {
+                // FIX 6: Detailed Signal Diagnostics
+                const longC1 = prevClose >= b5;
+                const longC2 = prevClose <= b4;
+                const longC3 = currClose > b4;
+                
+                const shortC1 = prevClose >= b2;
+                const shortC2 = prevClose <= b1;
+                const shortC3 = currClose < b2;
+                
+                if (longC1 && longC2 && longC3) {
                     longCond = 'PASS';
                     signalResult = 'SIGNAL DETECTED';
                     signalReason = 'LONG condition met';
-                } else if (prevClose >= b2 && prevClose <= b1 && currClose < b2) {
+                } else if (shortC1 && shortC2 && shortC3) {
                     shortCond = 'PASS';
                     signalResult = 'SIGNAL DETECTED';
                     signalReason = 'SHORT condition met';
                 } else {
                     signalReason = 'Conditions not met';
                 }
+                
+                // Enhanced diagnostic output
+                longCond = `prev>=B5:${longC1}, prev<=B4:${longC2}, curr>B4:${longC3} => FINAL: ${longCond === 'PASS'}`;
+                shortCond = `prev>=B2:${shortC1}, prev<=B1:${shortC2}, curr<B2:${shortC3} => FINAL: ${shortCond === 'PASS'}`;
+
             } else {
                 signalReason = 'Waiting for previous close data';
             }

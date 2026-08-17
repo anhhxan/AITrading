@@ -5,9 +5,6 @@ export class BB_Strategy implements IStrategy {
   
   private retracementZonePercent: number = 20; // 20%
   private timeoutCandles: number = 3;
-  
-  // To track previous candle for logic evaluation
-  private previousClose: number | null = null;
 
   public init(params: Record<string, any>): void {
     if (params.retracementZonePercent) this.retracementZonePercent = params.retracementZonePercent;
@@ -15,15 +12,14 @@ export class BB_Strategy implements IStrategy {
   }
 
   public evaluate(context: StrategyContext): any {
-    const { indicatorSnapshot, currentPrice } = context;
+    const { indicatorSnapshot, currentPrice, previousClose } = context;
     
-    // Need enough data
-    if (!indicatorSnapshot.ready || this.previousClose === null) {
-      this.previousClose = currentPrice;
+    // FIX 4: Use persistent previousClose from context instead of serverless memory
+    if (!indicatorSnapshot.ready || previousClose === undefined || previousClose === null) {
       return { direction: 'NONE' };
     }
 
-    const prevClose = this.previousClose;
+    const prevClose = previousClose;
     const currClose = currentPrice;
     
     const b1 = indicatorSnapshot.line1; // Upper Outer (Highest)
@@ -68,8 +64,7 @@ export class BB_Strategy implements IStrategy {
       };
     }
 
-    // Save current close for next iteration
-    this.previousClose = currClose;
+    // Removed state assignment because strategy is now stateless
     
     return {
       direction: signal,

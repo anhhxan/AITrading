@@ -37,6 +37,10 @@ export class PaperExecutionEngine implements IEngine {
         return;
       }
 
+      if (robot.trading_mode === 'LIVE') {
+        throw new Error('FATAL: PaperExecutionEngine cannot execute LIVE orders.');
+      }
+
       if (robot.trading_mode !== 'PAPER') {
         console.warn('[PaperExecutionEngine] REJECTED: Not in PAPER mode.', event.robotId);
         return;
