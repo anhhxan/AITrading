@@ -42,7 +42,7 @@ async function initEngines() {
 async function rehydrateContext(robotId: string) {
   const supabase = getSupabaseAdmin();
   
-  // 1. Fetch Active Config
+  // 1. Fetch Active Config and Robot State
   const { data: configData, error: configErr } = await supabase
     .from('robot_configs')
     .select('*, robots!inner(*)')
@@ -52,13 +52,16 @@ async function rehydrateContext(robotId: string) {
     
   if (configErr || !configData) throw new Error('MISSING_CONFIG');
   
+  const currentState = configData.robots.current_state || 'WAIT_SIGNAL';
+
   // Register Robot to Engines if not already registered (for memory persistence)
   if (!(strategyEngine as any).robotConfig.has(robotId)) {
     strategyEngine.registerRobot(robotId, 'BB_Strategy', {});
   }
-  if (!(stateMachine as any).states.has(robotId)) {
-    stateMachine.registerRobot(robotId);
-  }
+  
+  // FORCE stateMachine to align with DB state
+  (stateMachine as any).states.set(robotId, currentState);
+
   const positionAllocationPercent = configData.position_allocation_percent || configData.robots?.position_allocation_percent || configData.risk_profile?.position_allocation_percent;
   if (!positionAllocationPercent || positionAllocationPercent <= 0 || positionAllocationPercent > 100) {
     throw new Error('ROBOT_NOT_READY: Missing or invalid position allocation percent');
@@ -75,23 +78,41 @@ async function rehydrateContext(robotId: string) {
 
   // Rehydrate position contexts if active position exists
   const { data: pos } = await supabase.from('active_positions').select('*').eq('robot_id', robotId).single();
-  
   if (pos && pos.context_snapshot) {
     if (!(positionTracker as any).positionContexts.has(robotId)) {
       (positionTracker as any).positionContexts.set(robotId, pos.context_snapshot);
     }
-    if (!(stateMachine as any).states.has(robotId) || (stateMachine as any).states.get(robotId) === 'IDLE') {
-      (stateMachine as any).states.set(robotId, 'POSITION_OPEN');
-    }
-  } else {
-    // Check if waiting for entry
-    const { data: intent } = await supabase.from('execution_intents').select('*').eq('robot_id', robotId).eq('status', 'PENDING').single();
-    if (intent) {
-      if (!(stateMachine as any).states.has(robotId) || (stateMachine as any).states.get(robotId) === 'IDLE') {
-        (stateMachine as any).states.set(robotId, 'READY_TO_ENTER'); // Or WAIT_RETRACEMENT, but let's just say READY_TO_ENTER because we don't know
-        (stateMachine as any).activeSignals.set(robotId, { direction: intent.action });
+  }
+
+  // Rehydrate Active Signal from core_events if state requires it
+  if (currentState === 'WAIT_RETRACEMENT' || currentState === 'READY_TO_ENTER') {
+      const { data: signalEvent } = await supabase
+          .from('core_events')
+          .select('payload, timestamp')
+          .eq('robot_id', robotId)
+          .eq('event_type', 'STRATEGY_SIGNAL_EVENT')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+          
+      if (signalEvent && signalEvent.payload) {
+          const activeSignal = signalEvent.payload;
+          (stateMachine as any).activeSignals.set(robotId, activeSignal);
+          (riskEngine as any).activeSignals.set(robotId, activeSignal);
+          
+          // Rehydrate timeout count by counting CANDLE_CLOSED events since the signal
+          const { count } = await supabase
+              .from('core_events')
+              .select('*', { count: 'exact', head: true })
+              .eq('robot_id', robotId)
+              .eq('event_type', 'CANDLE_CLOSED')
+              .gt('timestamp', signalEvent.timestamp);
+              
+          (stateMachine as any).timeoutCounts.set(robotId, count || 0);
+          console.log(`[rehydrateContext] Rehydrated signal and state ${currentState} for ${robotId}. Timeout count: ${count || 0}`);
+      } else {
+          console.warn(`[rehydrateContext] Robot is in ${currentState} but no STRATEGY_SIGNAL_EVENT found.`);
       }
-    }
   }
 }
 
@@ -195,7 +216,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         await initEngines();
         await rehydrateContext(robotId);
         
-        // FIX 2: Fetch previous close from persistent source (robot_commands)
+        // FIX 2: Fetch previous payload from persistent source (robot_commands)
         const { data: lastCmd } = await supabase
             .from('robot_commands')
             .select('result')
@@ -207,8 +228,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
             .limit(1)
             .single();
         
-        const persistentPrevClose = lastCmd?.result?.close || null;
-        payload.previousClose = persistentPrevClose; // Pass down to adapter
+        const previousPayload = lastCmd?.result || null;
+        payload.previousPayload = previousPayload; // Pass down to adapter
 
         // Pass to adapter which generates CANDLE_CLOSED and INDICATOR_UPDATED
         const result = await adapter!.handleWebhook(payload, robotId);
@@ -230,62 +251,80 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
 
         // --- DIAGNOSTICS LOGGING ---
         try {
-            const prevClose = persistentPrevClose;
-            let longCond = 'FAIL';
-            let shortCond = 'FAIL';
             let signalResult = 'WEBHOOK RECEIVED - NO SIGNAL';
             let signalReason = 'N/A';
+            let diagnostics: any = {
+                last_webhook_at: new Date().toISOString(),
+                last_bar_timestamp: payload.barTimestamp,
+                last_signal_result: signalResult,
+                last_signal_reason: signalReason
+            };
             
-            if (prevClose !== null) {
-                const b5 = payload.plots.lower;
-                const b4 = payload.plots.lower2;
-                const b2 = payload.plots.upper2;
-                const b1 = payload.plots.upper;
+            if (previousPayload !== null && previousPayload.plots) {
+                const prevB5 = previousPayload.plots.lower;
+                const prevB4 = previousPayload.plots.lower2;
+                const prevB3 = previousPayload.plots.basis;
+                const prevB2 = previousPayload.plots.upper2;
+                const prevB1 = previousPayload.plots.upper;
+                const prevClose = previousPayload.close;
+                
+                const currB5 = payload.plots.lower;
+                const currB4 = payload.plots.lower2;
+                const currB3 = payload.plots.basis;
+                const currB2 = payload.plots.upper2;
+                const currB1 = payload.plots.upper;
                 const currClose = payload.close;
                 
-                // FIX 6: Detailed Signal Diagnostics
-                const longC1 = prevClose >= b5;
-                const longC2 = prevClose <= b4;
-                const longC3 = currClose > b4;
+                // LONG Condition
+                const longC1 = prevClose >= prevB5;
+                const longC2 = prevClose <= prevB4;
+                const longC3 = currClose > currB4;
+                const longFinal = longC1 && longC2 && longC3;
                 
-                const shortC1 = prevClose >= b2;
-                const shortC2 = prevClose <= b1;
-                const shortC3 = currClose < b2;
+                // SHORT Condition
+                const shortC1 = prevClose >= prevB2;
+                const shortC2 = prevClose <= prevB1;
+                const shortC3 = currClose < currB2;
+                const shortFinal = shortC1 && shortC2 && shortC3;
                 
-                if (longC1 && longC2 && longC3) {
-                    longCond = 'PASS';
+                if (longFinal) {
                     signalResult = 'SIGNAL DETECTED';
                     signalReason = 'LONG condition met';
-                } else if (shortC1 && shortC2 && shortC3) {
-                    shortCond = 'PASS';
+                } else if (shortFinal) {
                     signalResult = 'SIGNAL DETECTED';
                     signalReason = 'SHORT condition met';
                 } else {
                     signalReason = 'Conditions not met';
                 }
                 
-                // Enhanced diagnostic output
-                longCond = `prev>=B5:${longC1}, prev<=B4:${longC2}, curr>B4:${longC3} => FINAL: ${longCond === 'PASS'}`;
-                shortCond = `prev>=B2:${shortC1}, prev<=B1:${shortC2}, curr<B2:${shortC3} => FINAL: ${shortCond === 'PASS'}`;
-
+                diagnostics = {
+                    last_webhook_at: new Date().toISOString(),
+                    last_bar_timestamp: payload.barTimestamp,
+                    last_signal_result: signalResult,
+                    last_signal_reason: signalReason,
+                    
+                    prev_snapshot: {
+                        close: prevClose,
+                        b1: prevB1, b2: prevB2, b3: prevB3, b4: prevB4, b5: prevB5
+                    },
+                    curr_snapshot: {
+                        close: currClose,
+                        b1: currB1, b2: currB2, b3: currB3, b4: currB4, b5: currB5
+                    },
+                    logic_eval: {
+                        long_c1: longC1,
+                        long_c2: longC2,
+                        long_c3: longC3,
+                        long_final: longFinal,
+                        short_c1: shortC1,
+                        short_c2: shortC2,
+                        short_c3: shortC3,
+                        short_final: shortFinal
+                    }
+                };
             } else {
-                signalReason = 'Waiting for previous close data';
+                diagnostics.last_signal_reason = 'Waiting for previous close data';
             }
-            
-            const diagnostics = {
-                last_webhook_at: new Date().toISOString(),
-                last_bar_timestamp: payload.barTimestamp,
-                last_close: payload.close,
-                upper: payload.plots.upper,
-                upper2: payload.plots.upper2,
-                basis: payload.plots.basis,
-                lower2: payload.plots.lower2,
-                lower: payload.plots.lower,
-                long_condition: longCond,
-                short_condition: shortCond,
-                last_signal_result: signalResult,
-                last_signal_reason: signalReason
-            };
             
             await supabase.from('robots').update({
                 notification_profile: {

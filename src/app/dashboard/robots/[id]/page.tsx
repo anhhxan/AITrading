@@ -101,6 +101,10 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                 <p className="font-semibold text-slate-900">{robot.status}</p>
               </div>
               <div>
+                <p className="text-xs text-slate-500 mb-1">Engine State</p>
+                <p className="font-semibold text-indigo-600">{robot.current_state || 'UNKNOWN'}</p>
+              </div>
+              <div>
                 <p className="text-xs text-slate-500 mb-1">Trading Mode</p>
                 <p className="font-semibold text-slate-900">{robot.trading_mode || 'PAPER'}</p>
               </div>
@@ -281,44 +285,56 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                       <div className="text-xs text-slate-500 mb-1">Bar Timestamp</div>
                       <div className="font-mono text-sm font-medium">{new Date(robot.notification_profile.diagnostics.last_bar_timestamp).toLocaleString()}</div>
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Long Condition</div>
-                      <div className={`font-mono text-sm font-bold ${robot.notification_profile.diagnostics.long_condition === 'PASS' ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {robot.notification_profile.diagnostics.long_condition}
+                    {robot.notification_profile.diagnostics.logic_eval && (
+                      <div className="col-span-2 md:col-span-4 mt-4">
+                        <div className="text-xs text-slate-500 mb-2 uppercase font-semibold">Logic Evaluation</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="p-4 bg-white rounded-lg border border-slate-200 shadow-sm">
+                             <div className="text-sm font-bold text-slate-800 mb-3 border-b pb-2">LONG</div>
+                             <div className="text-xs font-mono space-y-2">
+                                <div className="flex justify-between"><span>C1 (prev &gt;= B5):</span> <span className={robot.notification_profile.diagnostics.logic_eval.long_c1 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.long_c1).toUpperCase()}</span></div>
+                                <div className="flex justify-between"><span>C2 (prev &lt;= B4):</span> <span className={robot.notification_profile.diagnostics.logic_eval.long_c2 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.long_c2).toUpperCase()}</span></div>
+                                <div className="flex justify-between"><span>C3 (curr &gt; B4):</span> <span className={robot.notification_profile.diagnostics.logic_eval.long_c3 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.long_c3).toUpperCase()}</span></div>
+                                <div className="flex justify-between mt-3 pt-2 border-t border-slate-100 font-bold text-sm"><span>FINAL:</span> <span className={robot.notification_profile.diagnostics.logic_eval.long_final ? 'text-emerald-600' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.long_final).toUpperCase()}</span></div>
+                             </div>
+                          </div>
+                          <div className="p-4 bg-white rounded-lg border border-slate-200 shadow-sm">
+                             <div className="text-sm font-bold text-slate-800 mb-3 border-b pb-2">SHORT</div>
+                             <div className="text-xs font-mono space-y-2">
+                                <div className="flex justify-between"><span>C1 (prev &gt;= B2):</span> <span className={robot.notification_profile.diagnostics.logic_eval.short_c1 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.short_c1).toUpperCase()}</span></div>
+                                <div className="flex justify-between"><span>C2 (prev &lt;= B1):</span> <span className={robot.notification_profile.diagnostics.logic_eval.short_c2 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.short_c2).toUpperCase()}</span></div>
+                                <div className="flex justify-between"><span>C3 (curr &lt; B2):</span> <span className={robot.notification_profile.diagnostics.logic_eval.short_c3 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.short_c3).toUpperCase()}</span></div>
+                                <div className="flex justify-between mt-3 pt-2 border-t border-slate-100 font-bold text-sm"><span>FINAL:</span> <span className={robot.notification_profile.diagnostics.logic_eval.short_final ? 'text-emerald-600' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.short_final).toUpperCase()}</span></div>
+                             </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Short Condition</div>
-                      <div className={`font-mono text-sm font-bold ${robot.notification_profile.diagnostics.short_condition === 'PASS' ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {robot.notification_profile.diagnostics.short_condition}
-                      </div>
-                    </div>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 p-4 bg-slate-100 rounded-lg">
-                    <div className="min-w-0">
-                      <div className="text-xs text-slate-500 mb-1 truncate">Close</div>
-                      <div className="font-mono text-sm font-bold truncate" title={String(robot.notification_profile.diagnostics.last_close)}>{robot.notification_profile.diagnostics.last_close}</div>
+                  <div className="space-y-4">
+                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="text-xs text-slate-500 mb-3 font-semibold uppercase">Previous Snapshot</div>
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">Close</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.close ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B1 (Upper)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b1 ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B2 (Upper2)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b2 ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B3 (Basis)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b3 ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B4 (Lower2)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b4 ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B5 (Lower)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b5 ?? 'N/A'}</div></div>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-xs text-slate-500 mb-1 truncate">Upper (B1)</div>
-                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.upper)}>{robot.notification_profile.diagnostics.upper}</div>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs text-slate-500 mb-1 truncate">Upper2 (B2)</div>
-                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.upper2)}>{robot.notification_profile.diagnostics.upper2}</div>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs text-slate-500 mb-1 truncate">Basis</div>
-                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.basis)}>{robot.notification_profile.diagnostics.basis}</div>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs text-slate-500 mb-1 truncate">Lower2 (B4)</div>
-                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.lower2)}>{robot.notification_profile.diagnostics.lower2}</div>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs text-slate-500 mb-1 truncate">Lower (B5)</div>
-                      <div className="font-mono text-sm truncate" title={String(robot.notification_profile.diagnostics.lower)}>{robot.notification_profile.diagnostics.lower}</div>
+
+                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 border-l-4 border-l-blue-500">
+                      <div className="text-xs text-blue-600 mb-3 font-semibold uppercase">Current Snapshot</div>
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">Close</div><div className="font-mono text-xs font-bold text-slate-900">{robot.notification_profile.diagnostics.curr_snapshot?.close ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B1 (Upper)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b1 ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B2 (Upper2)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b2 ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B3 (Basis)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b3 ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B4 (Lower2)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b4 ?? 'N/A'}</div></div>
+                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B5 (Lower)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b5 ?? 'N/A'}</div></div>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -80,6 +80,7 @@ export interface IIndicator {
 export interface StrategyContext {
   robotId: string;
   indicatorSnapshot: Record<string, any>;
+  previousSnapshot?: Record<string, any> | null;
   currentPrice: number;
   previousClose?: number | null; // FIX 3: Add previousClose field
   // Other contextual data can be passed here

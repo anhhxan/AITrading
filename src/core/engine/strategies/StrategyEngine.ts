@@ -68,6 +68,7 @@ export class StrategyEngine implements IEngine {
     const signal = PluginLoader.safeEvaluateStrategy(strategy, {
       robotId,
       indicatorSnapshot,
+      previousSnapshot: (event as any).previousSnapshot || null,
       currentPrice,
       previousClose: (event as any).previousClose // FIX 3: Pass down persistent previous close
     });

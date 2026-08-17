@@ -26,6 +26,7 @@ export interface TradingViewPayload {
   close: number;
   volume: number;
   previousClose?: number; // Added to hold persistent previous close
+  previousPayload?: any; // FULL previous payload
   indicator: {
     length: number;
     source: string;
@@ -42,6 +43,7 @@ export interface TradingViewPayload {
 }
 
 export interface ExpectedConfig {
+  id?: string;
   canonicalSymbol: string;
   timeframe: string;
   indicator: {
@@ -87,7 +89,7 @@ export class TradingViewAdapter {
         const supabase = getSupabaseAdmin();
         const { data, error } = await supabase
           .from('robot_configs')
-          .select('version, indicator_profile, robots!inner(trading_view_symbol, timeframe)')
+          .select('id, version, indicator_profile, robots!inner(trading_view_symbol, timeframe)')
           .eq('robot_id', robotId)
           .eq('status', 'ACTIVE')
           .single();
@@ -99,6 +101,7 @@ export class TradingViewAdapter {
 
         activeVersion = data.version;
         expectedConfig = {
+          id: data.id,
           canonicalSymbol: data.robots.trading_view_symbol,
           timeframe: data.robots.timeframe,
           indicator: {
@@ -125,10 +128,29 @@ export class TradingViewAdapter {
 
     if (payload.tvSymbol !== expectedConfig.canonicalSymbol) validationErrors.push('Symbol mismatch');
     if (canonicalTF.toLowerCase() !== expectedConfig.timeframe.toLowerCase()) validationErrors.push('Timeframe mismatch');
-    if (payload.indicator.length !== expectedConfig.indicator.length) validationErrors.push('Length mismatch');
-    if (payload.indicator.source !== expectedConfig.indicator.source) validationErrors.push('Source mismatch');
-    if (payload.indicator.mult !== expectedConfig.indicator.mult) validationErrors.push('Mult mismatch');
-    if (payload.indicator.mult2 !== expectedConfig.indicator.mult2) validationErrors.push('Mult2 mismatch');
+    
+    // Dynamic Config Update Check
+    let configChanged = false;
+    if (payload.indicator.length !== expectedConfig.indicator.length) configChanged = true;
+    if (payload.indicator.source !== expectedConfig.indicator.source) configChanged = true;
+    if (payload.indicator.mult !== expectedConfig.indicator.mult) configChanged = true;
+    if (payload.indicator.mult2 !== expectedConfig.indicator.mult2) configChanged = true;
+
+    if (configChanged && expectedConfig.id) {
+        console.log(`[TradingViewAdapter] Dynamic Config Update detected for ${robotId}. Updating DB...`);
+        const supabase = getSupabaseAdmin();
+        const { error } = await supabase.from('robot_configs')
+            .update({ indicator_profile: payload.indicator })
+            .eq('id', expectedConfig.id);
+            
+        if (error) {
+            console.error(`[TradingViewAdapter] FAILED to persist new indicator config:`, error);
+            validationErrors.push('DB Config Update Failed');
+        } else {
+            console.log(`[TradingViewAdapter] Successfully persisted new config. Continuing with event.`);
+            expectedConfig.indicator = payload.indicator; // update in-memory instance
+        }
+    }
 
     if (validationErrors.length > 0) {
       console.error(`[TradingViewAdapter] VALIDATION REJECTED:`, validationErrors);
@@ -150,6 +172,17 @@ export class TradingViewAdapter {
       close: payload.close,
       volume: payload.volume,
     };
+    
+    let previousSnapshot = null;
+    if (payload.previousPayload && payload.previousPayload.plots) {
+      previousSnapshot = {
+        line1: payload.previousPayload.plots.upper,
+        line2: payload.previousPayload.plots.upper2,
+        line3: payload.previousPayload.plots.basis,
+        line4: payload.previousPayload.plots.lower2,
+        line5: payload.previousPayload.plots.lower,
+      };
+    }
 
     let seq = this.sequences.get(robotId) || 1;
     const correlationId = 'corr-' + payload.barTimestamp;
@@ -160,7 +193,8 @@ export class TradingViewAdapter {
     
     const trace2 = EventFactory.createTrace(correlationId, candleEvent.eventId, 'TradingViewAdapter', seq++);
     const indicatorUpdatedEvent = EventFactory.createEvent('INDICATOR_UPDATED', robotId, activeVersion, trace2, {
-      previousClose: payload.previousClose, // FIX 3: Pass previousClose to StrategyEngine via EventBus
+      previousClose: payload.previousPayload?.close || null,
+      previousSnapshot: previousSnapshot,
       indicators: {
         'BB_MB': {
           ready: true,
