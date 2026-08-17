@@ -110,6 +110,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ robotId: string }> | { robotId: string } }) {
+    const vercel_received_at = Date.now();
     // Resolve params for Next.js 15+ compatibility
     const resolvedParams = await params;
     const robotId = resolvedParams.robotId;
@@ -266,11 +267,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         }
         // --- END DIAGNOSTICS ---
 
+        const vercel_response_at = Date.now();
+        console.log(`[VERCEL WEBHOOK] Processed robot ${robotId}. Total Latency: ${vercel_response_at - vercel_received_at}ms`);
+
         return NextResponse.json({ status: 'OK', command_id: deterministicCommandId }, { status: 200 });
     } catch (err: any) {
         console.error('[TV WEBHOOK] Execution Error:', err);
         await supabase.from('robot_commands').update({ status: 'FAILED', result: err.message }).eq('command_id', deterministicCommandId);
         
+        const vercel_response_at = Date.now();
+        console.log(`[VERCEL WEBHOOK] Error on robot ${robotId}. Total Latency: ${vercel_response_at - vercel_received_at}ms`);
+
         if (err.message && err.message.includes('ROBOT_NOT_READY')) {
             return NextResponse.json({ error: err.message }, { status: 400 });
         }
