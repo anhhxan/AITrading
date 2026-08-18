@@ -68,7 +68,7 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
         <div className="flex items-center gap-4">
           <div className="h-12 w-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
             <Bot size={24} />
@@ -86,8 +86,7 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
+      <div className="flex flex-col space-y-6">
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="font-semibold text-slate-800 flex items-center">
@@ -95,37 +94,53 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                 Status Overview
               </h3>
             </div>
-            <div className="p-6 grid grid-cols-2 md:grid-cols-5 gap-6">
+            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
               <div>
                 <p className="text-xs text-slate-500 mb-1">Lifecycle Status</p>
-                <p className="font-semibold text-slate-900">{robot.status}</p>
+                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.status}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Engine State</p>
-                <p className="font-semibold text-indigo-600">{robot.current_state || 'UNKNOWN'}</p>
+                <p className="font-semibold text-indigo-600 min-w-0 break-words">{robot.current_state || 'UNKNOWN'}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Trading Mode</p>
-                <p className="font-semibold text-slate-900">{robot.trading_mode || 'PAPER'}</p>
+                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.trading_mode || 'PAPER'}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Paper Balance</p>
-                <p className="font-semibold text-blue-600">${Number(robot.paper_balance || 10000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                <p className="font-semibold text-blue-600 min-w-0 break-words">${Number(robot.paper_balance || 10000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Trading Status</p>
-                <p className="font-semibold text-slate-900">{robot.trading_enabled ? <span className="text-emerald-600">ON</span> : <span className="text-slate-500">PAUSED</span>}</p>
+                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.trading_enabled ? <span className="text-emerald-600">ON</span> : <span className="text-slate-500">PAUSED</span>}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">TradingView Symbol</p>
-                <p className="font-semibold text-slate-900">{robot.trading_view_symbol || 'N/A'}</p>
+                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.trading_view_symbol || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Execution Symbol</p>
-                <p className="font-semibold text-slate-900">{robot.execution_symbol || 'N/A'}</p>
+                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.execution_symbol || 'N/A'}</p>
               </div>
             </div>
           </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+            <h3 className="font-semibold text-slate-900 mb-4">Control Panel</h3>
+            <RobotControlPanel 
+              robotId={robot.id} 
+              currentStatus={robot.status} 
+              tradingEnabled={robot.trading_enabled}
+              action="CONTROLS" 
+            />
+            <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 space-y-2">
+              <p><strong>Commands:</strong> START/STOP send async commands to the worker.</p>
+              <p><strong>Archive:</strong> Disables the robot permanently via RPC.</p>
+              <p><strong>Trading:</strong> Edit database to set trading_enabled=true.</p>
+            </div>
+          </div>
+        
 
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100">
@@ -200,24 +215,24 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
             <div className="p-6">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
                 <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">TradingView Symbol</div>
-                  <div className="font-mono font-bold text-slate-900 truncate" title={robot.trading_view_symbol}>{robot.trading_view_symbol}</div>
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">TradingView Symbol</div>
+                  <div className="font-mono font-bold text-slate-900 break-words" title={robot.trading_view_symbol}>{robot.trading_view_symbol}</div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">Execution Symbol</div>
-                  <div className="font-mono font-bold text-blue-600 truncate" title={robot.execution_symbol}>{robot.execution_symbol}</div>
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">Execution Symbol</div>
+                  <div className="font-mono font-bold text-blue-600 break-words" title={robot.execution_symbol}>{robot.execution_symbol}</div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">Timeframe</div>
-                  <div className="font-mono font-bold text-slate-900 uppercase truncate">{robot.timeframe}</div>
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">Timeframe</div>
+                  <div className="font-mono font-bold text-slate-900 uppercase break-words">{robot.timeframe}</div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">Strategy</div>
-                  <div className="font-mono font-bold text-slate-900 truncate">{configs?.[0]?.strategy_profile?.type || 'N/A'}</div>
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">Strategy</div>
+                  <div className="font-mono font-bold text-slate-900 break-words">{configs?.[0]?.strategy_profile?.type || 'N/A'}</div>
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider truncate">Position Allocation</div>
-                  <div className="font-mono font-bold text-emerald-600 truncate">
+                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">Position Allocation</div>
+                  <div className="font-mono font-bold text-emerald-600 break-words">
                     {configs?.[0]?.risk_profile?.position_allocation_percent 
                       ? `${configs[0].risk_profile.position_allocation_percent}% of balance`
                       : <span className="text-red-500 font-semibold">NOT CONFIGURED</span>}
@@ -356,7 +371,7 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                     <div key={intent.id} className="p-4 text-sm flex justify-between">
                       <div>
                         <div className="font-medium">{intent.action} {intent.symbol}</div>
-                        <div className="text-xs text-slate-400 truncate w-32">{intent.client_order_id}</div>
+                        <div className="text-xs text-slate-400 break-words w-32">{intent.client_order_id}</div>
                       </div>
                       <div className="text-right">
                         <div className="text-xs font-semibold">{intent.status}</div>
@@ -423,24 +438,6 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
                 )}
             </div>
           </div>
-        </div>
-
-        <div className="md:col-span-1 space-y-6">
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-            <h3 className="font-semibold text-slate-900 mb-4">Control Panel</h3>
-            <RobotControlPanel 
-              robotId={robot.id} 
-              currentStatus={robot.status} 
-              tradingEnabled={robot.trading_enabled}
-              action="CONTROLS" 
-            />
-            <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 space-y-2">
-              <p><strong>Commands:</strong> START/STOP send async commands to the worker.</p>
-              <p><strong>Archive:</strong> Disables the robot permanently via RPC.</p>
-              <p><strong>Trading:</strong> Edit database to set trading_enabled=true.</p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   )

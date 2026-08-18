@@ -76,7 +76,7 @@ export default function RobotControlPanel({
     <div className="space-y-4">
       {error && <div className="text-red-500 text-sm bg-red-50 p-2 rounded">{error}</div>}
       
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <button
           onClick={() => handleCommand('START')}
           disabled={loading || currentStatus === 'RUNNING' || currentStatus === 'ARCHIVED'}
@@ -96,7 +96,7 @@ export default function RobotControlPanel({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mt-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
         <button
           onClick={() => handleToggleTrading(true)}
           disabled={loading || tradingEnabled || currentStatus === 'ARCHIVED'}
