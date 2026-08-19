@@ -13,19 +13,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     }
 
     const testId = crypto.randomUUID();
-    const proxyBaseUrl = process.env.TV_WEBHOOK_PROXY_URL || 'https://tv-webhook-proxy.tradingbn.workers.dev/api/webhook/tv';
+    const proxyBaseUrl = process.env.CLOUDFLARE_PROXY_URL || 'https://tv-webhook-proxy.tradingbn.workers.dev';
+    const proxyToken = process.env.CLOUDFLARE_PROXY_TOKEN || '';
+    const targetUrl = `${proxyBaseUrl}/tv/${robotId}/${proxyToken}`;
+    
+    // Webhook auth secret in case we still need it (worker usually injects it but just in case)
     const secret = process.env.TV_WEBHOOK_SECRET || '';
-    const targetUrl = `${proxyBaseUrl}/${robotId}`;
 
     const payload = {
         isTest: true,
         testId: testId,
         event_type: 'TEST_SIGNAL',
         timestamp: Date.now(),
-        // Add fake OHLC to bypass any strict parsers in worker if needed
-        tvSymbol: "BTCUSDT",
-        barTimestamp: Date.now(),
-        open: 64000, high: 64000, low: 64000, close: 64000, volume: 1
+        tvSymbol: "TEST",
+        timeframe: "1",
+        open: 100, high: 101, low: 99, close: 100, volume: 1,
+        indicator: {}
     };
 
     const startTime = Date.now();
@@ -80,9 +83,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         retries++;
     }
 
+    const safeTargetUrl = `${proxyBaseUrl}/tv/${robotId}/[HIDDEN_TOKEN]`;
+
     return NextResponse.json({
         testId,
-        targetUrl,
+        targetUrl: safeTargetUrl,
         worker_request_status: cfError ? 'FAILED' : 'SENT',
         worker_response_status: cfStatus,
         worker_response_text: cfResponseText.substring(0, 200),

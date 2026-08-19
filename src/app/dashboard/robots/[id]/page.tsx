@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Bot, Play, Square, Archive, Activity, FileText, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import RobotControlPanel from './RobotControlPanel'
+import TestSignalButton from './TestSignalButton'
 
 export default async function RobotDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
@@ -141,8 +142,13 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
             </div>
           </div>
         
+          <TestSignalButton 
+            robotId={robot.id} 
+            status={robot.status} 
+            tradingMode={robot.trading_mode} 
+          />
 
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mt-6">
             <div className="px-6 py-4 border-b border-slate-100">
               <h3 className="font-semibold text-slate-800 flex items-center">
                 <FileText className="w-4 h-4 mr-2" />
