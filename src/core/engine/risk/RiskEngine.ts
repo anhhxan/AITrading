@@ -25,6 +25,7 @@ export interface TradePlanEvent extends BaseEvent {
   positionSize: number;
   leverage: number;
   riskRewardRatio: number;
+  orderType?: string;
   
   indicatorReference: {
     name: string;
@@ -168,6 +169,7 @@ export class RiskEngine implements IEngine {
       positionSize: positionSize,
       leverage: config.leverage,
       riskRewardRatio: rr,
+      orderType: 'LIMIT',
       indicatorReference: {
         ...indicatorRef,
         snapshot: {

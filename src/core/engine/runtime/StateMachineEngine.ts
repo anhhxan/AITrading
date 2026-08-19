@@ -66,6 +66,10 @@ export class StateMachineEngine implements IEngine {
        await this.handlePositionClosed(e);
     }));
 
+    this.unsubs.push(coreEventBus.subscribe('RISK_REJECTED_EVENT', async (e: any) => {
+       await this.handleRiskRejected(e);
+    }));
+
     this.status = 'READY';
   }
 
@@ -109,13 +113,27 @@ export class StateMachineEngine implements IEngine {
       
       console.log(`[StateMachineEngine] Evaluating Trigger: currentPrice=${currentPrice}, trigger=${JSON.stringify(trigger)}`);
 
-      // 1. Check Trigger FIRST
+      // 1. Check Trigger FIRST (Retracement Zone evaluation via OHLC)
       let isTriggered = false;
-      if (trigger && currentPrice >= trigger.lower && currentPrice <= trigger.upper) {
-        isTriggered = true;
+      let calculatedFillPrice = event.candle.close; // Fallback
+      
+      if (trigger) {
+        const { open, low, high } = event.candle;
+        
+        if (activeSignal.direction === 'LONG') {
+          isTriggered = open >= trigger.lower && low <= trigger.upper;
+          if (isTriggered) {
+            calculatedFillPrice = Math.min(open, trigger.upper);
+          }
+        } else if (activeSignal.direction === 'SHORT') {
+          isTriggered = open <= trigger.upper && high >= trigger.lower;
+          if (isTriggered) {
+            calculatedFillPrice = Math.max(open, trigger.lower);
+          }
+        }
       }
       
-      console.log(`[StateMachineEngine] isTriggered: ${isTriggered}`);
+      console.log(`[StateMachineEngine] isTriggered: ${isTriggered}, calculatedFillPrice: ${calculatedFillPrice}`);
 
       if (isTriggered) {
         this.states.set(robotId, RobotState.READY_TO_ENTER);
@@ -136,7 +154,7 @@ export class StateMachineEngine implements IEngine {
             previousState: RobotState.WAIT_RETRACEMENT,
             newState: RobotState.READY_TO_ENTER,
             reason: 'TRIGGER_MATCHED',
-            triggerPrice: currentPrice
+            triggerPrice: calculatedFillPrice
           }
         );
         await coreEventBus.publish(transitionEvent as any);
@@ -236,6 +254,36 @@ export class StateMachineEngine implements IEngine {
       await coreEventBus.publish(transitionEvent as any);
     } else {
       console.warn(`[StateMachineEngine] REJECTED POSITION_CLOSED_EVENT for ${robotId}. Invalid state: ${currentState}`);
+    }
+  }
+
+  private async handleRiskRejected(event: any) {
+    const robotId = event.robotId;
+    const currentState = this.states.get(robotId);
+    
+    // Valid transition: READY_TO_ENTER -> WAIT_SIGNAL
+    if (currentState === RobotState.READY_TO_ENTER) {
+      this.states.set(robotId, RobotState.WAIT_SIGNAL);
+      await this.persistState(robotId, RobotState.WAIT_SIGNAL);
+      
+      const trace = EventFactory.createTrace(
+        event.trace.correlationId,
+        event.eventId,
+        this.engineId,
+        event.trace.sequence
+      );
+
+      const transitionEvent = EventFactory.createEvent(
+        'STATE_TRANSITION_EVENT',
+        robotId, event.configVersion || 1,
+        trace,
+        {
+          previousState: RobotState.READY_TO_ENTER,
+          newState: RobotState.WAIT_SIGNAL,
+          reason: 'RISK_REJECTED'
+        }
+      );
+      await coreEventBus.publish(transitionEvent as any);
     }
   }
 
