@@ -26,7 +26,7 @@ async function auditPhase15B() {
     
   if (err1) console.error(err1);
   console.log(`\n=== ROBOT COMMANDS ===`);
-  cmds?.forEach(c => console.log(`${c.created_at} | ${c.status} | ${JSON.stringify(c.result).substring(0, 100)}`));
+  cmds?.forEach((c: any) => console.log(`${c.created_at} | ${c.status} | ${JSON.stringify(c.result).substring(0, 100)}`));
 
   const { data: events, error: err2 } = await supabase
     .from('core_events')
@@ -38,7 +38,7 @@ async function auditPhase15B() {
     
   if (err2) console.error(err2);
   console.log(`\n=== CORE EVENTS ===`);
-  events?.forEach(e => console.log(`${e.created_at} | ${e.event_type} | ${JSON.stringify(e.payload).substring(0, 100)}`));
+  events?.forEach((e: any) => console.log(`${e.created_at} | ${e.event_type} | ${JSON.stringify(e.payload).substring(0, 100)}`));
 }
 
 auditPhase15B().catch(console.error);

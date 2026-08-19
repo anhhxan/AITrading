@@ -32,7 +32,7 @@ async function auditGaps() {
     if (err1) console.error(err1);
     console.log(`robot_commands count: ${cmds?.length || 0}`);
     if (cmds && cmds.length > 0) {
-        cmds.forEach(c => console.log(`  - ${c.created_at} | ${c.status} | ${c.result}`));
+        cmds.forEach((c: any) => console.log(`  - ${c.created_at} | ${c.status} | ${c.result}`));
     }
 
     const { data: events, error: err2 } = await supabase
