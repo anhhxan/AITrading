@@ -7,9 +7,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     const robotId = resolvedParams.robotId;
     
     const supabase = getSupabaseAdmin();
-    const { data: robot, error: robotError } = await supabase.from('robots').select('id, status').eq('id', robotId).single();
+    const { data: robot, error: robotError } = await supabase.from('robots').select('id, status, trading_view_symbol, timeframe').eq('id', robotId).single();
     if (robotError || !robot) {
         return NextResponse.json({ error: 'ROBOT_NOT_FOUND' }, { status: 404 });
+    }
+
+    if (robot.status !== 'RUNNING') {
+        return NextResponse.json({ error: 'ROBOT_NOT_RUNNING', details: `Status is ${robot.status}` }, { status: 400 });
+    }
+
+    if (!robot.trading_view_symbol || !robot.timeframe) {
+        return NextResponse.json({ error: 'MISSING_ROBOT_CONFIG', details: 'Robot is missing trading_view_symbol or timeframe' }, { status: 400 });
     }
 
     const testId = crypto.randomUUID();
@@ -25,8 +33,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         testId: testId,
         event_type: 'TEST_SIGNAL',
         timestamp: Date.now(),
-        tvSymbol: "TEST",
-        timeframe: "1",
+        tvSymbol: robot.trading_view_symbol,
+        timeframe: robot.timeframe,
         open: 100, high: 101, low: 99, close: 100, volume: 1,
         indicator: {}
     };
