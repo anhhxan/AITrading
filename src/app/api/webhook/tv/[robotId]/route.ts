@@ -95,15 +95,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     }
 
     if (payload.isTest) {
-        await supabase.from('core_events').insert({
+        console.log(`[WEBHOOK] TEST_ID=${payload.testId}`);
+        const { error: eventErr } = await supabase.from('core_events').insert({
             robot_id: robotId,
+            event_id: crypto.randomUUID(),
             event_type: 'TEST_SIGNAL',
+            correlation_id: payload.testId,
+            event_sequence: Date.now(),
+            timestamp: Date.now(),
             payload: {
                 testId: payload.testId,
                 execution_status: 'SKIPPED',
                 received_at: new Date().toISOString()
             }
         });
+        if (eventErr) {
+            console.error(`[WEBHOOK] Failed to insert core_events TEST_ID=${payload.testId}`, eventErr);
+        }
     }
 
     const vercel_response_at = Date.now();

@@ -111,8 +111,8 @@ export class CommandPoller {
                     return;
                 }
 
-                // If test signal, already skipped in route.ts, but let's complete it here
                 if (payload.isTest) {
+                    console.log(`[WORKER] TEST_ID=${payload.testId}`);
                     await this.completeCommand(cmd.command_id, 'SUCCEEDED', { ...payload, execution: 'SKIPPED' });
                     return;
                 }

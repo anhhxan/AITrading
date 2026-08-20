@@ -21,6 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     }
 
     const testId = crypto.randomUUID();
+    console.log(`[BFF] TEST_ID=${testId}`);
     const proxyBaseUrl = process.env.CLOUDFLARE_PROXY_URL || 'https://tv-webhook-proxy.tradingbn.workers.dev';
     const proxyToken = process.env.CLOUDFLARE_PROXY_TOKEN || '';
     const targetUrl = `${proxyBaseUrl}/tv/${robotId}/${proxyToken}`;
