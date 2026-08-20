@@ -15,15 +15,8 @@ export async function sendRobotCommand(robotId: string, commandType: 'START' | '
   const correlationId = `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
   const commandId = crypto.randomUUID();
 
-  // 2. Server-side Idempotent State Transition
-  let updateData: any = {};
-  
   if (commandType === 'STOP') {
-    updateData = {
-      status: 'STOPPED',
-      current_state: 'IDLE',
-      trading_enabled: false
-    };
+    // Just validate it's allowed
   } else if (commandType === 'START') {
     // Phase 15O check: Must have an ACTIVE config
     const { data: activeConfig } = await supabase
@@ -36,28 +29,10 @@ export async function sendRobotCommand(robotId: string, commandType: 'START' | '
     if (!activeConfig) {
       return { error: 'Cannot start robot: No ACTIVE configuration found.' };
     }
-    
-    updateData = {
-      status: 'RUNNING',
-      current_state: 'WAIT_SIGNAL',
-      trading_enabled: true
-    };
   }
 
-  // Atomically update robot state and insert command
-  const { error: updateError } = await supabase
-    .from('robots')
-    .update(updateData)
-    .eq('id', robotId)
-    // Optional: add condition to not start an archived robot, etc.
-
-  if (updateError) {
-    console.error(`Send ${commandType} error:`, updateError)
-    return { error: updateError.message }
-  }
-
-  // Insert command to keep history
-  await supabase
+  // Insert command to keep history and let worker pick it up
+  const { error: cmdError } = await supabase
     .from('robot_commands')
     .insert({
       command_id: commandId,
@@ -65,9 +40,13 @@ export async function sendRobotCommand(robotId: string, commandType: 'START' | '
       user_id: user.id,
       command_type: commandType,
       correlation_id: correlationId,
-      status: 'SUCCEEDED', // Successfully processed synchronously
-      result: updateData
+      status: 'RECEIVED'
     });
+
+  if (cmdError) {
+    console.error(`Send ${commandType} error:`, cmdError)
+    return { error: cmdError.message }
+  }
 
   revalidatePath(`/dashboard/robots`)
   revalidatePath(`/dashboard/robots/${robotId}`)

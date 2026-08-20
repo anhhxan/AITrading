@@ -25,68 +25,105 @@ export class PaperExecutionEngine implements IEngine {
     const supabase = getSupabaseAdmin();
 
     try {
-      // 1. Verify trading_mode === 'PAPER' and trading_enabled
       const { data: robot, error: robotErr } = await supabase
         .from('robots')
         .select('trading_mode, trading_enabled, status')
         .eq('id', event.robotId)
         .single();
         
-      if (robotErr || !robot) {
-        console.error('[PaperExecutionEngine] Failed to load robot:', event.robotId);
-        return;
-      }
+      if (robotErr || !robot) return;
+      if (robot.trading_mode === 'LIVE') throw new Error('FATAL: Cannot execute LIVE orders.');
+      if (robot.trading_mode !== 'PAPER') return;
 
-      if (robot.trading_mode === 'LIVE') {
-        throw new Error('FATAL: PaperExecutionEngine cannot execute LIVE orders.');
-      }
-
-      if (robot.trading_mode !== 'PAPER') {
-        console.warn('[PaperExecutionEngine] REJECTED: Not in PAPER mode.', event.robotId);
-        return;
-      }
-      
-      if (!robot.trading_enabled) {
-          // In some tests trading_enabled is false, we might want to bypass or enforce it. 
-          // The prompt said: "trading_enabled = false... Expected: execution_intent = 1". 
-          // So for paper mode, we might execute even if trading_enabled is false (or only reject LIVE). 
-          // Wait, the prompt says "Robot: trading_mode = PAPER, trading_enabled = false. Expected: execution_intent = 1".
-          // So we do NOT block on trading_enabled here.
-      }
-
-      // Mapping Side and Action
       const side = event.direction === 'LONG' ? 'BUY' : 'SELL';
       const action = event.direction === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT';
-      
-      // We will map execution intent direction. 
-      // PostgreSQL `position_side` enum (LONG, SHORT). But execution_intents uses VARCHAR.
       const positionSide = event.direction; 
       
-      if (!event.entryReferencePrice || event.entryReferencePrice <= 0) {
-        console.error('[PaperExecutionEngine] REJECTED: Invalid entryReferencePrice', event.entryReferencePrice);
-        return;
-      }
+      if (!event.entryReferencePrice || event.entryReferencePrice <= 0) return;
 
-      // 1.5 Guard: SINGLE OPEN POSITION PER ROBOT
-      const { data: existingPos, error: checkErr } = await supabase
+      const { data: existingPos } = await supabase
         .from('active_positions')
-        .select('id')
+        .select('*')
         .eq('robot_id', event.robotId)
-        .limit(1);
+        .limit(1)
+        .maybeSingle();
 
-      if (checkErr) {
-        console.error('[PaperExecutionEngine] ACTIVE POSITIONS CHECK ERROR:', checkErr.message);
-        return;
-      }
-      if (existingPos && existingPos.length > 0) {
-        console.log(`[PaperExecutionEngine] REJECTED: POSITION_ALREADY_OPEN for robot ${event.robotId}`);
-        return;
+      if (existingPos) {
+        if (existingPos.side === positionSide) {
+          console.log(`[PaperExecutionEngine] REJECTED: POSITION_ALREADY_OPEN for robot ${event.robotId}`);
+          return;
+        } else {
+          console.log(`[PaperExecutionEngine] REVERSAL DETECTED for robot ${event.robotId}. Closing existing position.`);
+          
+          // 1. Insert CLOSE intent
+          const closeAction = existingPos.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
+          const closeClientOrderId = `PAPER-CLS-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
+          
+          const { data: closeIntentData } = await supabase.from('execution_intents').insert({
+            robot_id: event.robotId,
+            signal_id: event.eventId,
+            client_order_id: closeClientOrderId,
+            action: closeAction,
+            symbol: event.executionSymbol,
+            order_type: 'MARKET',
+            quantity: existingPos.quantity,
+            price: event.entryReferencePrice,
+            leverage: existingPos.leverage,
+            status: 'FILLED'
+          }).select('id').single();
+
+          if (closeIntentData) {
+              // 2. Insert CLOSE active_order
+              await supabase.from('active_orders').insert({
+                intent_id: closeIntentData.id,
+                robot_id: event.robotId,
+                binance_order_id: `MOCK-BINANCE-${closeClientOrderId}`,
+                client_order_id: closeClientOrderId,
+                symbol: event.executionSymbol,
+                side: existingPos.side === 'LONG' ? 'SELL' : 'BUY',
+                order_type: 'MARKET',
+                quantity: existingPos.quantity,
+                price: event.entryReferencePrice,
+                filled_quantity: existingPos.quantity,
+                average_fill_price: event.entryReferencePrice,
+                status: 'FILLED',
+                role: 'EXIT'
+              });
+          }
+
+          // 3. Move active_position to position_history
+          const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (event.entryReferencePrice - existingPos.entry_price) * existingPos.quantity;
+          await supabase.from('position_history').insert({
+              robot_id: event.robotId,
+              symbol: existingPos.symbol,
+              side: existingPos.side,
+              quantity: existingPos.quantity,
+              entry_price: existingPos.entry_price,
+              exit_price: event.entryReferencePrice,
+              leverage: existingPos.leverage,
+              realized_pnl: pnl,
+              opened_at: existingPos.created_at,
+              closed_at: new Date().toISOString(),
+              close_reason: 'REVERSAL'
+          });
+
+          // 4. Delete active_position
+          await supabase.from('active_positions').delete().eq('id', existingPos.id);
+
+          const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
+          const closedEvent = EventFactory.createEvent('POSITION_CLOSED_EVENT', event.robotId, event.configVersion || 1, trace, {
+            symbol: event.executionSymbol,
+            side: existingPos.side,
+            quantity: existingPos.quantity,
+            exitPrice: event.entryReferencePrice,
+            realizedPnl: pnl
+          });
+          await coreEventBus.publish(closedEvent as any);
+        }
       }
 
-      // 2. Insert execution_intents
-      // Idempotency uses (robot_id, signal_id) which we map to event.eventId
+      // 2. Insert OPEN execution_intents
       const clientOrderId = `PAPER-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
-      
       const { data: intentData, error: intentErr } = await supabase
         .from('execution_intents')
         .insert({
@@ -105,17 +142,12 @@ export class PaperExecutionEngine implements IEngine {
         .single();
 
       if (intentErr) {
-        if (intentErr.code === '23505') {
-            console.log('[PaperExecutionEngine] REJECTED: Duplicate intent (idempotency caught).', event.robotId, event.eventId);
-            return;
-        }
-        console.error('[PaperExecutionEngine] INTENT INSERT ERROR:', intentErr.message);
+        if (intentErr.code === '23505') return; // Duplicate
         return;
       }
-
       const intentId = intentData.id;
 
-      // 3. Insert active_orders
+      // 3. Insert OPEN active_orders
       const binanceOrderId = `MOCK-BINANCE-${clientOrderId}`;
       const { data: orderData, error: orderErr } = await supabase
         .from('active_orders')
@@ -138,20 +170,17 @@ export class PaperExecutionEngine implements IEngine {
         .single();
 
       if (orderErr) {
-        console.error('[PaperExecutionEngine] ORDER INSERT ERROR:', orderErr.message);
-        // Compensating cleanup
         await supabase.from('execution_intents').delete().eq('id', intentId);
         return;
       }
 
       // 4. Insert active_positions
-      const { data: posData, error: posErr } = await supabase
+      const { error: posErr } = await supabase
         .from('active_positions')
         .insert({
           robot_id: event.robotId,
           symbol: event.executionSymbol,
-          side: positionSide, // Wait, active_positions side is VARCHAR, usually BUY/SELL or LONG/SHORT? 
-          // Phase 3 migration active_positions: side VARCHAR(10) NOT NULL. Let's use LONG/SHORT.
+          side: positionSide,
           quantity: event.positionSize,
           entry_price: event.entryReferencePrice,
           leverage: event.leverage,
@@ -159,7 +188,6 @@ export class PaperExecutionEngine implements IEngine {
           realized_pnl: 0,
           stop_loss_price: event.stopLoss,
           take_profit_price: event.takeProfit,
-          binance_position_id: null,
           context_snapshot: {
             executionSymbol: event.executionSymbol,
             tradingViewSymbol: event.tradingViewSymbol,
@@ -167,30 +195,16 @@ export class PaperExecutionEngine implements IEngine {
             strategyId: event.strategyId,
             indicatorSnapshot: event.indicatorReference
           }
-        })
-        .select('id')
-        .single();
+        });
 
       if (posErr) {
-        if (posErr.code === '23505') {
-           console.log('[PaperExecutionEngine] REJECTED: Duplicate position for robot-symbol.', event.robotId);
-        } else {
-           console.error('[PaperExecutionEngine] POSITION INSERT ERROR:', posErr.message);
-        }
-        // Compensating cleanup
         await supabase.from('active_orders').delete().eq('id', orderData.id);
         await supabase.from('execution_intents').delete().eq('id', intentId);
         return;
       }
 
       // 5. Publish POSITION_OPENED_EVENT
-      const trace = EventFactory.createTrace(
-        event.trace.correlationId,
-        event.eventId,
-        this.engineId,
-        event.trace.sequence
-      );
-
+      const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
       const openedEvent = EventFactory.createEvent('POSITION_OPENED_EVENT', event.robotId, event.configVersion || 1, trace, {
         symbol: event.executionSymbol,
         tradingViewSymbol: event.tradingViewSymbol,
@@ -204,8 +218,6 @@ export class PaperExecutionEngine implements IEngine {
         takeProfit: event.takeProfit,
         leverage: event.leverage
       });
-
-      console.log('[PaperExecutionEngine] Position opened successfully. Publishing POSITION_OPENED_EVENT.');
       await coreEventBus.publish(openedEvent as any);
 
     } catch (e: any) {
