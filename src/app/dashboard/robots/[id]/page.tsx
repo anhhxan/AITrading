@@ -213,10 +213,27 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
           
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="font-semibold text-slate-800 flex items-center">
-                <FileText className="w-4 h-4 mr-2" />
-                Robot Configuration (Strict)
-              </h3>
+              <div className="flex items-center gap-3">
+                <h3 className="font-semibold text-slate-800 flex items-center">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Robot Configuration (Strict)
+                </h3>
+                {configs?.[0]?.status && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                    configs[0].status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' :
+                    configs[0].status === 'PENDING' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {configs[0].status}
+                  </span>
+                )}
+              </div>
+              {configs?.[0]?.status === 'PENDING' && (
+                <RobotControlPanel
+                  robotId={robot.id}
+                  configId={configs[0].id}
+                  action="APPLY_CONFIG"
+                />
+              )}
             </div>
             <div className="p-6">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
