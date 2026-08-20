@@ -362,7 +362,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         const vercel_response_at = Date.now();
         console.log(`[VERCEL WEBHOOK] Error on robot ${robotId}. Total Latency: ${vercel_response_at - vercel_received_at}ms`);
 
-        if (err.message && err.message.includes('ROBOT_NOT_READY')) {
+        if (err.message && (err.message.includes('ROBOT_NOT_READY') || err.message === 'MISSING_CONFIG')) {
             return NextResponse.json({ error: err.message }, { status: 400 });
         }
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

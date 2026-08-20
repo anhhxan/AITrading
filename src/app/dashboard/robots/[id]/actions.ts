@@ -11,12 +11,53 @@ export async function sendRobotCommand(robotId: string, commandType: 'START' | '
 
   if (!user) return { error: 'Not authenticated' }
 
+  // 1. Audit Log via robot_commands
   const correlationId = `cmd-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
-
-  // 1. Generate a valid UUID for the command (since `command_id` is UUID UNIQUE NOT NULL)
   const commandId = crypto.randomUUID();
 
-  const { error } = await supabase
+  // 2. Server-side Idempotent State Transition
+  let updateData: any = {};
+  
+  if (commandType === 'STOP') {
+    updateData = {
+      status: 'STOPPED',
+      current_state: 'IDLE',
+      trading_enabled: false
+    };
+  } else if (commandType === 'START') {
+    // Phase 15O check: Must have an ACTIVE config
+    const { data: activeConfig } = await supabase
+      .from('robot_configs')
+      .select('id')
+      .eq('robot_id', robotId)
+      .eq('status', 'ACTIVE')
+      .maybeSingle();
+
+    if (!activeConfig) {
+      return { error: 'Cannot start robot: No ACTIVE configuration found.' };
+    }
+    
+    updateData = {
+      status: 'RUNNING',
+      current_state: 'WAIT_SIGNAL',
+      trading_enabled: true
+    };
+  }
+
+  // Atomically update robot state and insert command
+  const { error: updateError } = await supabase
+    .from('robots')
+    .update(updateData)
+    .eq('id', robotId)
+    // Optional: add condition to not start an archived robot, etc.
+
+  if (updateError) {
+    console.error(`Send ${commandType} error:`, updateError)
+    return { error: updateError.message }
+  }
+
+  // Insert command to keep history
+  await supabase
     .from('robot_commands')
     .insert({
       command_id: commandId,
@@ -24,14 +65,11 @@ export async function sendRobotCommand(robotId: string, commandType: 'START' | '
       user_id: user.id,
       command_type: commandType,
       correlation_id: correlationId,
-      status: 'RECEIVED'
-    })
+      status: 'SUCCEEDED', // Successfully processed synchronously
+      result: updateData
+    });
 
-  if (error) {
-    console.error(`Send ${commandType} error:`, error)
-    return { error: error.message }
-  }
-
+  revalidatePath(`/dashboard/robots`)
   revalidatePath(`/dashboard/robots/${robotId}`)
   return { success: true }
 }
@@ -93,6 +131,18 @@ export async function toggleTradingAction(robotId: string, enabled: boolean) {
   const updateData: any = { trading_enabled: enabled }
 
   if (enabled) {
+    // REQUIRED FORENSIC FIX: Validate ACTIVE config exists
+    const { data: activeConfig } = await supabase
+      .from('robot_configs')
+      .select('id')
+      .eq('robot_id', robotId)
+      .eq('status', 'ACTIVE')
+      .maybeSingle();
+
+    if (!activeConfig) {
+      return { error: 'Cannot start robot: No ACTIVE configuration found. Please apply a configuration first.' };
+    }
+
     const { data: robot } = await supabase.from('robots').select('status').eq('id', robotId).single()
     if (robot && robot.status === 'CREATED') {
       updateData.status = 'RUNNING'
