@@ -26,7 +26,10 @@ export class RobotRuntime {
             .eq('status', 'ACTIVE')
             .single();
 
-        if (configErr || !configData) throw new Error('MISSING_CONFIG');
+        if (configErr || !configData) {
+            console.warn(`[RuntimeManager] Robot ${this.robotId} is missing config. Registering for heartbeat only.`);
+            return;
+        }
 
         const currentState = configData.robots.current_state || 'WAIT_SIGNAL';
         
