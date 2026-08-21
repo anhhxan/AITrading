@@ -21,7 +21,7 @@ export class PaperExecutionEngine implements IEngine {
   }
 
   private async handleTradePlan(event: TradePlanEvent) {
-    console.log('[PaperExecutionEngine] Received TRADE_PLAN_EVENT for', event.robotId);
+    console.log(`[PAPER] EXECUTION_STARTED TEST_ID=${event.trace.correlationId} robot=${event.robotId}`);
     const supabase = getSupabaseAdmin();
 
     try {
@@ -31,15 +31,26 @@ export class PaperExecutionEngine implements IEngine {
         .eq('id', event.robotId)
         .single();
         
-      if (robotErr || !robot) return;
-      if (robot.trading_mode === 'LIVE') throw new Error('FATAL: Cannot execute LIVE orders.');
-      if (robot.trading_mode !== 'PAPER') return;
+      if (robotErr || !robot) {
+        console.log(`[PAPER] EXECUTION_SKIPPED TEST_ID=${event.trace.correlationId} reason=ROBOT_NOT_FOUND`);
+        return;
+      }
+      if (robot.trading_mode === 'LIVE') {
+        throw new Error('FATAL: Cannot execute LIVE orders.');
+      }
+      if (robot.trading_mode !== 'PAPER') {
+        console.log(`[PAPER] EXECUTION_SKIPPED TEST_ID=${event.trace.correlationId} reason=NOT_PAPER_MODE`);
+        return;
+      }
 
       const side = event.direction === 'LONG' ? 'BUY' : 'SELL';
       const action = event.direction === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT';
       const positionSide = event.direction; 
       
-      if (!event.entryReferencePrice || event.entryReferencePrice <= 0) return;
+      if (!event.entryReferencePrice || event.entryReferencePrice <= 0) {
+        console.log(`[PAPER] EXECUTION_REJECTED TEST_ID=${event.trace.correlationId} reason=INVALID_PRICE`);
+        return;
+      }
 
       const { data: existingPos } = await supabase
         .from('active_positions')
@@ -50,7 +61,7 @@ export class PaperExecutionEngine implements IEngine {
 
       if (existingPos) {
         if (existingPos.side === positionSide) {
-          console.log(`[PaperExecutionEngine] REJECTED: POSITION_ALREADY_OPEN for robot ${event.robotId}`);
+          console.log(`[PAPER] EXECUTION_REJECTED TEST_ID=${event.trace.correlationId} reason=POSITION_ALREADY_OPEN robot=${event.robotId}`);
           return;
         } else {
           console.log(`[PaperExecutionEngine] REVERSAL DETECTED for robot ${event.robotId}. Closing existing position.`);
@@ -119,6 +130,7 @@ export class PaperExecutionEngine implements IEngine {
             realizedPnl: pnl
           });
           await coreEventBus.publish(closedEvent as any);
+          console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${event.trace.correlationId} position closed`);
         }
       }
 
@@ -219,8 +231,10 @@ export class PaperExecutionEngine implements IEngine {
         leverage: event.leverage
       });
       await coreEventBus.publish(openedEvent as any);
+      console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${event.trace.correlationId} position opened`);
 
     } catch (e: any) {
+        console.log(`[PAPER] EXECUTION_REJECTED TEST_ID=${event.trace.correlationId} error=${e.message}`);
         console.error('[PaperExecutionEngine] EXCEPTION:', e.message);
     }
   }

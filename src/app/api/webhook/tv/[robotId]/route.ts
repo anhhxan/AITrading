@@ -112,6 +112,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         if (eventErr) {
             console.error(`[WEBHOOK] Failed to insert core_events TEST_ID=${payload.testId}`, eventErr);
         }
+    } else {
+        console.log(`[WEBHOOK] REAL_SIGNAL`);
+        console.log(`[WEBHOOK] robot_id=${robotId}`);
+        console.log(`[WEBHOOK] symbol=${payload.tvSymbol || payload.symbol || 'UNKNOWN'}`);
+        console.log(`[WEBHOOK] side=${payload.action || payload.side || 'UNKNOWN'}`);
+        console.log(`[WEBHOOK] mode=${robot.trading_mode}`);
     }
 
     const vercel_response_at = Date.now();
