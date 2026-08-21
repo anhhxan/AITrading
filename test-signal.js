@@ -1,0 +1,1 @@
+const payload = { action: 'buy', tvSymbol: 'BINANCE:BTCUSDT.P', close: 100000, volume: 10 }; fetch('https://tv-webhook-proxy.tradingbn.workers.dev/tv/ab80dcb8-2a05-4a08-81f7-dbddb714b828/2b10cb9e53612f145e846d2a1df642593c8aa078dfef58d97c189e9d258498e9', { method: 'POST', body: JSON.stringify(payload) }).then(r => r.text()).then(console.log);
