@@ -117,6 +117,12 @@ export class CommandPoller {
                     return;
                 }
 
+                if (result.events) {
+                    for (const ev of result.events) {
+                        await coreEventBus.publish(ev.eventInstance);
+                    }
+                }
+
                 // Wait for execution to finish
                 await coreEventBus.waitForIdle(cmd.robot_id);
                 await this.completeCommand(cmd.command_id, 'SUCCEEDED', payload);
