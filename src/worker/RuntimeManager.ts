@@ -147,6 +147,7 @@ export class RuntimeManager {
         // In a real app we might batch this or update each robot
         for (const id of robotIds) {
             await supabase.from('robots').update({ last_heartbeat_at: new Date().toISOString() }).eq('id', id);
+            console.log(`[Heartbeat] robot=${id} OK`);
         }
     }
 }

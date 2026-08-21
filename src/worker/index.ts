@@ -31,15 +31,45 @@ async function bootstrap() {
     const runtimeManager = new RuntimeManager();
     await runtimeManager.initializeEngines();
     
+    console.log('[Recovery] Loading RUNNING robots...');
+    try {
+        const supabase = getSupabaseAdmin();
+        const { data: runningRobots, error: recErr } = await supabase
+            .from('robots')
+            .select('id')
+            .eq('status', 'RUNNING');
+            
+        if (recErr) {
+            console.error('[Recovery] Failed to load running robots:', recErr);
+        } else if (runningRobots) {
+            console.log(`[Recovery] Found ${runningRobots.length} RUNNING robots`);
+            let registered = 0;
+            for (const r of runningRobots) {
+                try {
+                    await runtimeManager.getOrCreateRuntime(r.id);
+                    console.log(`[Recovery] REGISTER robot=${r.id}`);
+                    registered++;
+                } catch (e: any) {
+                    // Ignore MISSING_CONFIG gracefully to continue recovering others
+                    console.error(`[Recovery] Failed to register robot=${r.id}`, e.message);
+                }
+            }
+            console.log(`[Recovery] COMPLETE registered=${registered}`);
+        }
+    } catch (err) {
+        console.error('[Recovery] Unexpected error during recovery:', err);
+    }
+
     const poller = new CommandPoller(runtimeManager);
     poller.start();
     console.log('[Worker] command_poller=STARTED');
-    console.log('[Worker] heartbeat=STARTED'); // Placeholder logic heartbeat below
+    console.log('[Worker] heartbeat=STARTED'); 
+    console.log('[Worker] READY');
     console.log('[Worker] =================================');
 
     // Heartbeat logic
     setInterval(() => {
-        runtimeManager.heartbeatAll();
+        runtimeManager.heartbeatAll().catch(e => console.error('[Heartbeat] Error:', e));
     }, 10000);
 
     process.on('SIGINT', () => {
