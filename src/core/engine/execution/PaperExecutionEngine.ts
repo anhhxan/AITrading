@@ -72,7 +72,7 @@ export class PaperExecutionEngine implements IEngine {
           
           const { data: closeIntentData } = await supabase.from('execution_intents').insert({
             robot_id: event.robotId,
-            signal_id: event.eventId,
+            signal_id: `${event.eventId}-CLS`,
             client_order_id: closeClientOrderId,
             action: closeAction,
             symbol: event.executionSymbol,
@@ -102,21 +102,27 @@ export class PaperExecutionEngine implements IEngine {
               });
           }
 
-          // 3. Move active_position to position_history
+          // 3. Move active_position to trade_history
           const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (event.entryReferencePrice - existingPos.entry_price) * existingPos.quantity;
-          await supabase.from('position_history').insert({
+          const ctx = existingPos.context_snapshot || {};
+          const { error: histErr } = await supabase.from('trade_history').insert({
               robot_id: event.robotId,
-              symbol: existingPos.symbol,
+              action: existingPos.side === 'LONG' ? 'SELL' : 'BUY',
               side: existingPos.side,
-              quantity: existingPos.quantity,
+              amount: existingPos.quantity,
               entry_price: existingPos.entry_price,
               exit_price: event.entryReferencePrice,
-              leverage: existingPos.leverage,
-              realized_pnl: pnl,
-              opened_at: existingPos.created_at,
-              closed_at: new Date().toISOString(),
-              close_reason: 'REVERSAL'
+              pnl: pnl,
+              fee: 0,
+              slippage: 0,
+              reason: 'REVERSAL',
+              execution_symbol: existingPos.symbol,
+              trading_view_symbol: ctx.tradingViewSymbol || event.tradingViewSymbol,
+              timeframe: ctx.timeframe || event.timeframe,
+              strategy_id: ctx.strategyId || event.strategyId,
+              indicator_snapshot: ctx.indicatorSnapshot || {}
           });
+          if (histErr) console.error('[PaperExecutionEngine] REVERSAL trade_history insert failed:', histErr);
 
           // 4. Delete active_position
           await supabase.from('active_positions').delete().eq('id', existingPos.id);
@@ -154,6 +160,7 @@ export class PaperExecutionEngine implements IEngine {
         .single();
 
       if (intentErr) {
+        console.error('[PaperExecutionEngine] intentErr:', intentErr);
         if (intentErr.code === '23505') return; // Duplicate
         return;
       }
@@ -182,6 +189,7 @@ export class PaperExecutionEngine implements IEngine {
         .single();
 
       if (orderErr) {
+        console.error('[PaperExecutionEngine] orderErr:', orderErr);
         await supabase.from('execution_intents').delete().eq('id', intentId);
         return;
       }
@@ -210,6 +218,7 @@ export class PaperExecutionEngine implements IEngine {
         });
 
       if (posErr) {
+        console.error('[PaperExecutionEngine] posErr:', posErr);
         await supabase.from('active_orders').delete().eq('id', orderData.id);
         await supabase.from('execution_intents').delete().eq('id', intentId);
         return;
