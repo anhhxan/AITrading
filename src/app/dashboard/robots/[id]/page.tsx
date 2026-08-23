@@ -85,6 +85,9 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <Link href={`/dashboard/robots/${resolvedParams.id}/pipeline`} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 flex items-center gap-2">
+            <Activity size={16} /> Signal Pipeline Monitor
+          </Link>
           {getHeartbeatStatus(robot.last_heartbeat_at)}
         </div>
       </div>
