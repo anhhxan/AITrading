@@ -21,13 +21,6 @@ CREATE POLICY "Users view own trade history" ON trade_history FOR SELECT USING (
 DROP POLICY IF EXISTS "Users insert own trade history" ON trade_history;
 CREATE POLICY "Users insert own trade history" ON trade_history FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM robots WHERE robots.id = trade_history.robot_id AND robots.user_id = auth.uid()));
 
--- 5. trade_snapshots
-DROP POLICY IF EXISTS "Users view own trade snapshots" ON trade_snapshots;
-CREATE POLICY "Users view own trade snapshots" ON trade_snapshots FOR SELECT USING (EXISTS (SELECT 1 FROM trade_history JOIN robots ON trade_history.robot_id = robots.id WHERE trade_history.id = trade_snapshots.trade_id AND robots.user_id = auth.uid()));
-
-DROP POLICY IF EXISTS "Users insert own trade snapshots" ON trade_snapshots;
-CREATE POLICY "Users insert own trade snapshots" ON trade_snapshots FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM trade_history JOIN robots ON trade_history.robot_id = robots.id WHERE trade_history.id = trade_snapshots.trade_id AND robots.user_id = auth.uid()));
-
--- 6. positions (if applicable)
+-- 5. positions (if applicable)
 DROP POLICY IF EXISTS "Users access own positions" ON positions;
 CREATE POLICY "Users access own positions" ON positions FOR ALL USING (EXISTS (SELECT 1 FROM robots WHERE robots.id = positions.robot_id AND robots.user_id = auth.uid()));
