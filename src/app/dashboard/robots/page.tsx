@@ -1,4 +1,4 @@
-﻿import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import RobotListTable from './RobotListTable'
@@ -9,15 +9,16 @@ export default async function RobotsPage() {
 
   if (!user) return null
 
-  const { data: robots } = await supabase
+  const { data: allRobots } = await supabase
     .from('robots')
     .select('*, trading_accounts(name)')
     .order('display_order', { ascending: true })
     .order('created_at', { ascending: false })
 
+  // Safely filter out archived robots (in memory, to prevent crashes if column doesn't exist yet)
+  const robots = (allRobots || []).filter(r => r.is_archived !== true)
+
   // Fetch PnL data
-  // Since grouping isn't supported directly via supabase-js without an RPC, 
-  // we'll fetch PnL for all user's robots and sum it here to stay within constraints.
   let pnlData: Record<string, number> = {}
   
   if (robots && robots.length > 0) {

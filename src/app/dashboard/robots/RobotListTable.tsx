@@ -1,9 +1,9 @@
-﻿'use client'
+'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Bot, ArrowUp, ArrowDown, Trash2 } from 'lucide-react'
-import { swapRobotOrderAction, deletePaperRobotAction } from './actions'
+import { Bot, ArrowUp, ArrowDown, Archive } from 'lucide-react'
+import { swapRobotOrderAction, archiveRobotAction } from './actions'
 
 export default function RobotListTable({ robots, pnlData }: { robots: any[], pnlData: Record<string, number> }) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
@@ -27,12 +27,12 @@ export default function RobotListTable({ robots, pnlData }: { robots: any[], pnl
     setLoadingAction(null)
   }
 
-  const handleDelete = async (robot: any) => {
-    if (robot.status === 'RUNNING') return;
+  const handleArchive = async (robot: any) => {
+    if (robot.status === 'RUNNING' || robot.trading_enabled) return;
     
-    if (confirm(`Bạn có chắc muốn xóa Robot này?\n\nTên: ${robot.name}\nBalance: $${robot.paper_balance}\n\nNếu có lịch sử lệnh, hệ thống có thể từ chối xóa.`)) {
-      setLoadingAction(`delete-${robot.id}`)
-      const res = await deletePaperRobotAction(robot.id)
+    if (confirm(`Archive Robot này?\n\nTên: ${robot.name}\nTimeframe: ${robot.timeframe}\nMode: ${robot.trading_mode}\nBalance: $${robot.paper_balance}\nPnL: $${pnlData[robot.id] || 0}`)) {
+      setLoadingAction(`archive-${robot.id}`)
+      const res = await archiveRobotAction(robot.id)
       if (res.error) {
         alert(res.error)
       }
@@ -91,7 +91,7 @@ export default function RobotListTable({ robots, pnlData }: { robots: any[], pnl
             {robots.map((robot, idx) => {
               const pnl = pnlData[robot.id] || 0;
               const isRunning = robot.status === 'RUNNING';
-              const canDelete = robot.trading_mode === 'PAPER' && !isRunning;
+              const canArchive = robot.trading_mode === 'PAPER' && !isRunning && !robot.trading_enabled;
 
               return (
                 <tr key={robot.id} className="hover:bg-slate-50/50 transition-colors">
@@ -165,12 +165,12 @@ export default function RobotListTable({ robots, pnlData }: { robots: any[], pnl
                         View
                       </Link>
                       <button
-                        onClick={() => handleDelete(robot)}
-                        disabled={!canDelete || loadingAction !== null}
-                        title={isRunning ? "Cannot delete running robot" : "Delete Robot"}
-                        className={`text-slate-400 hover:text-red-600 p-1.5 rounded-md transition-colors ${!canDelete ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        onClick={() => handleArchive(robot)}
+                        disabled={!canArchive || loadingAction !== null}
+                        title={!canArchive ? "Cannot archive (must be PAPER, STOPPED, trading OFF)" : "Archive Robot"}
+                        className={`text-slate-400 hover:text-amber-600 p-1.5 rounded-md transition-colors ${!canArchive ? 'opacity-30 cursor-not-allowed hidden' : ''}`}
                       >
-                        <Trash2 size={16} />
+                        <Archive size={16} />
                       </button>
                     </div>
                   </td>
