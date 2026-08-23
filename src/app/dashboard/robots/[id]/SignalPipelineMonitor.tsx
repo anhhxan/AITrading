@@ -150,18 +150,18 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
   };
 
   const renderNode = (name: string, data: { status: NodeStatus, time?: string, error?: string, detail?: string, result?: string }, isLast = false) => {
-    let icon = <div className="w-4 h-4 rounded-full bg-slate-700 border-2 border-slate-600" />;
+    let icon = <div className="w-4 h-4 rounded-full bg-slate-200 border-2 border-slate-300" />;
     if (data.status === 'SUCCESS') {
       icon = (
         <div className="relative flex items-center justify-center w-4 h-4">
           <div className="w-3 h-3 rounded-full bg-emerald-400 absolute animate-ping opacity-75"></div>
-          <div className="w-3 h-3 rounded-full bg-emerald-500 relative z-10 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+          <div className="w-3 h-3 rounded-full bg-emerald-500 relative z-10 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
         </div>
       );
     } else if (data.status === 'ERROR') {
       icon = (
         <div className="relative flex items-center justify-center w-4 h-4">
-          <div className="w-3 h-3 rounded-full bg-red-500 relative z-10 shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+          <div className="w-3 h-3 rounded-full bg-red-500 relative z-10 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
         </div>
       );
     }
@@ -173,12 +173,12 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
              {icon}
           </div>
           <div className="flex-1 py-1">
-            <div className={`font-semibold text-sm ${data.status === 'SUCCESS' ? 'text-slate-200' : data.status === 'ERROR' ? 'text-red-400' : 'text-slate-500'}`}>{name}</div>
+            <div className={`font-semibold text-sm ${data.status === 'SUCCESS' ? 'text-slate-800' : data.status === 'ERROR' ? 'text-red-600' : 'text-slate-500'}`}>{name}</div>
             {data.time && <div className="text-[10px] text-slate-500 font-mono">{data.time}</div>}
             {data.detail && data.status === 'SUCCESS' && <div className="text-[11px] text-slate-400 mt-0.5">{data.detail}</div>}
-            {data.error && data.status === 'ERROR' && <div className="text-[11px] text-red-400 font-medium mt-0.5">Error: {data.error}</div>}
+            {data.error && data.status === 'ERROR' && <div className="text-[11px] text-red-500 font-medium mt-0.5">Error: {data.error}</div>}
             {data.result && data.status === 'SUCCESS' && (
-               <div className={`text-xs font-bold mt-1 ${data.result === 'LONG' || data.result === 'SHORT' ? 'text-emerald-400' : 'text-slate-400'}`}>
+               <div className={`text-xs font-bold mt-1 ${data.result === 'LONG' || data.result === 'SHORT' ? 'text-emerald-600' : 'text-slate-600'}`}>
                  {data.result}
                </div>
             )}
@@ -187,7 +187,7 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
         {!isLast && (
           <div className="flex items-center gap-4 h-8">
             <div className="flex-shrink-0 w-8 flex justify-center h-full">
-              <div className={`w-[2px] h-full ${data.status === 'SUCCESS' ? 'bg-emerald-500/30' : 'bg-slate-700'}`}></div>
+              <div className={`w-[2px] h-full ${data.status === 'SUCCESS' ? 'bg-emerald-200' : 'bg-slate-200'}`}></div>
             </div>
             <div className="flex-1"></div>
           </div>
@@ -197,20 +197,20 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
   };
 
   return (
-    <div className="bg-[#0b1120] border border-slate-800 rounded-xl shadow-xl overflow-hidden mb-6 mt-6">
-      <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-[#0f172a]">
-        <h3 className="font-bold text-white flex items-center tracking-wider text-sm">
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6 mt-6">
+      <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <h3 className="font-bold text-slate-800 flex items-center tracking-wider text-sm">
           <div className="w-2 h-2 rounded-full bg-blue-500 mr-2 animate-pulse"></div>
           SIGNAL PIPELINE MONITOR
         </h3>
         {pipeline.correlationId && (
-          <span className="text-[10px] text-slate-400 font-mono px-2 py-1 bg-slate-800 rounded border border-slate-700">
+          <span className="text-[10px] text-slate-500 font-mono px-2 py-1 bg-white rounded border border-slate-200 shadow-sm">
             ID: {pipeline.correlationId.split('_').pop()}
           </span>
         )}
       </div>
       <div className="p-6">
-        <div className="bg-[#0f172a] rounded-xl p-6 md:p-8 max-w-lg mx-auto shadow-inner border border-slate-800/50">
+        <div className="bg-slate-50 rounded-xl p-6 md:p-8 max-w-lg mx-auto border border-slate-100">
           {renderNode('TradingView', pipeline.tradingView)}
           {renderNode('Cloudflare', pipeline.cloudflare)}
           {renderNode('Vercel', pipeline.vercel)}
@@ -221,7 +221,7 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
           {renderNode('Signal Result', pipeline.signalResult, true)}
         </div>
         <div className="mt-6 text-center">
-          <div className="inline-block px-4 py-1.5 rounded-full bg-slate-800/50 border border-slate-700 text-xs text-slate-400 font-mono">
+          <div className="inline-block px-4 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-xs text-slate-500 font-mono shadow-sm">
             {pipeline.lastEventTime ? `LAST EVENT: ${pipeline.lastEventTime}` : 'WAITING FOR NEXT WEBHOOK...'}
           </div>
         </div>
