@@ -75,6 +75,32 @@ export class StrategyEngine implements IEngine {
 
     console.log(`[StrategyEngine] EVALUATED SIGNAL:`, signal);
 
+    // ==========================================
+    // OBSERVABILITY EVENT (Always published, even for NONE)
+    // ==========================================
+    const evalTrace = EventFactory.createTrace(
+      event.trace.correlationId,
+      event.eventId,
+      this.engineId,
+      event.trace.sequence
+    );
+
+    const evaluatedEvent = EventFactory.createEvent(
+      'STRATEGY_EVALUATED',
+      robotId, event.configVersion || 1,
+      evalTrace,
+      {
+        direction: signal === 'ERROR' ? 'ERROR' : (signal?.direction || 'NONE'),
+        result: signal === 'ERROR' ? 'ERROR' : (signal?.direction || 'NONE'),
+        commandId: event.trace.correlationId,
+        strategyId: strategy.name
+      }
+    );
+    await coreEventBus.publish(evaluatedEvent as any);
+
+    // ==========================================
+    // TRADING SIGNAL EVENT (Only published for LONG/SHORT)
+    // ==========================================
     if (signal !== 'ERROR' && signal && signal.direction !== 'NONE') {
        const trace = EventFactory.createTrace(
          event.trace.correlationId,

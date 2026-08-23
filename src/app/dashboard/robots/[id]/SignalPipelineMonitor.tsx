@@ -55,7 +55,7 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
          const { data: events } = await supabase.from('core_events')
            .select('*')
            .eq('robot_id', robotId)
-           .eq('event_type', 'STRATEGY_SIGNAL_EVENT')
+           .eq('event_type', 'STRATEGY_EVALUATED')
            .eq('correlation_id', cmd.correlation_id)
            .limit(1);
            
@@ -84,7 +84,7 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
         { event: 'INSERT', schema: 'public', table: 'core_events', filter: `robot_id=eq.${robotId}` },
         (payload) => {
           const ev = payload.new as any;
-          if (ev.event_type !== 'STRATEGY_SIGNAL_EVENT') return;
+          if (ev.event_type !== 'STRATEGY_EVALUATED') return;
           updatePipelineStateFromEvent(ev);
         }
       )
