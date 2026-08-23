@@ -149,7 +149,7 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
       });
   };
 
-  const renderNode = (name: string, data: { status: NodeStatus, time?: string, error?: string, detail?: string }, isLast = false) => {
+  const renderNode = (name: string, data: { status: NodeStatus, time?: string, error?: string, detail?: string, result?: string }, isLast = false) => {
     let icon = <div className="w-4 h-4 rounded-full bg-slate-700 border-2 border-slate-600" />;
     if (data.status === 'SUCCESS') {
       icon = (
