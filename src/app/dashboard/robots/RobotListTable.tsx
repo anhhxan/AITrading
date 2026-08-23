@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Bot, ArrowUp, ArrowDown, Archive } from 'lucide-react'
-import { swapRobotOrderAction, archiveRobotAction } from './actions'
+import { updateRobotOrdersAction, archiveRobotAction } from './actions'
 
 export default function RobotListTable({ robots, pnlData }: { robots: any[], pnlData: Record<string, number> }) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
@@ -13,14 +13,17 @@ export default function RobotListTable({ robots, pnlData }: { robots: any[], pnl
     if (direction === 'down' && currentIndex === robots.length - 1) return;
 
     const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    const r1 = robots[currentIndex];
-    const r2 = robots[swapIndex];
+    
+    // Create a new array with the visual order explicitly numbered
+    const newOrder = [...robots];
+    // Swap the elements
+    [newOrder[currentIndex], newOrder[swapIndex]] = [newOrder[swapIndex], newOrder[currentIndex]];
 
-    const order1 = r1.display_order ?? currentIndex;
-    const order2 = r2.display_order ?? swapIndex;
+    // Map them all to explicit { id, order } so they never fallback to 0 ambiguously
+    const updates = newOrder.map((r, idx) => ({ id: r.id, order: idx }));
 
-    setLoadingAction(`swap-${r1.id}`)
-    const res = await swapRobotOrderAction(r1.id, order1, r2.id, order2)
+    setLoadingAction(`swap-${robots[currentIndex].id}`)
+    const res = await updateRobotOrdersAction(updates)
     if (res.error) {
       alert(res.error)
     }

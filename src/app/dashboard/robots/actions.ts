@@ -3,28 +3,22 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 
-export async function swapRobotOrderAction(robotId1: string, order1: number, robotId2: string, order2: number) {
+export async function updateRobotOrdersAction(updates: { id: string, order: number }[]) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not authenticated' }
 
-  // Update robot 1
-  const { error: e1 } = await supabase
-    .from('robots')
-    .update({ display_order: order2 })
-    .eq('id', robotId1)
-    .eq('user_id', user.id)
-
-  if (e1) return { error: e1.message }
-
-  // Update robot 2
-  const { error: e2 } = await supabase
-    .from('robots')
-    .update({ display_order: order1 })
-    .eq('id', robotId2)
-    .eq('user_id', user.id)
-
-  if (e2) return { error: e2.message }
+  // Supabase doesn't easily support batch updates of different rows with different values in JS client without RPC.
+  // So we will do it sequentially (usually max 10-20 robots so it's fast enough for UI).
+  for (const update of updates) {
+    const { error } = await supabase
+      .from('robots')
+      .update({ display_order: update.order })
+      .eq('id', update.id)
+      .eq('user_id', user.id)
+    
+    if (error) return { error: error.message }
+  }
 
   revalidatePath('/dashboard/robots')
   return { success: true }
