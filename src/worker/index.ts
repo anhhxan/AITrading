@@ -22,11 +22,14 @@ async function bootstrap() {
         process.exit(1);
     }
 
-    console.log('[Worker] =================================');
-    console.log('[Worker] PAPER WORKER STARTING');
-    console.log(`[Worker] worker_id=${workerId}`);
-    console.log(`[Worker] environment=${envStr}`);
-    console.log('[Worker] database=CONNECTED');
+    console.log(JSON.stringify({
+        event: 'PAPER_WORKER_STARTING',
+        service: 'ai-trading-worker',
+        deployment: process.env.RAILWAY_DEPLOYMENT_ID || 'local',
+        process_id: process.pid,
+        environment: envStr,
+        timestamp_utc: new Date().toISOString()
+    }));
 
     const runtimeManager = new RuntimeManager();
     await runtimeManager.initializeEngines();
@@ -50,7 +53,6 @@ async function bootstrap() {
                     console.log(`[Recovery] REGISTER robot=${r.id}`);
                     registered++;
                 } catch (e: any) {
-                    // Ignore MISSING_CONFIG gracefully to continue recovering others
                     console.error(`[Recovery] Failed to register robot=${r.id}`, e.message);
                 }
             }
@@ -62,10 +64,30 @@ async function bootstrap() {
 
     const poller = new CommandPoller(runtimeManager);
     poller.start();
-    console.log('[Worker] command_poller=STARTED');
-    console.log('[Worker] heartbeat=STARTED'); 
-    console.log('[Worker] READY');
-    console.log('[Worker] =================================');
+    console.log(JSON.stringify({
+        event: 'COMMAND_POLLER_STARTED',
+        service: 'ai-trading-worker',
+        deployment: process.env.RAILWAY_DEPLOYMENT_ID || 'local',
+        process_id: process.pid,
+        timestamp_utc: new Date().toISOString()
+    }));
+    
+    console.log(JSON.stringify({
+        event: 'HEARTBEAT_STARTED',
+        service: 'ai-trading-worker',
+        deployment: process.env.RAILWAY_DEPLOYMENT_ID || 'local',
+        process_id: process.pid,
+        timestamp_utc: new Date().toISOString()
+    }));
+
+    console.log(JSON.stringify({
+        event: 'PAPER_WORKER_READY',
+        service: 'ai-trading-worker',
+        deployment: process.env.RAILWAY_DEPLOYMENT_ID || 'local',
+        process_id: process.pid,
+        environment: envStr,
+        timestamp_utc: new Date().toISOString()
+    }));
 
     // Heartbeat logic
     setInterval(() => {
