@@ -104,7 +104,7 @@ export class CommandPoller {
                     payload.previousPayload = lastCmd.result.payload || lastCmd.result; 
                 }
 
-                const result = await this.runtimeManager.adapter.handleWebhook(payload, cmd.robot_id);
+                const result = await this.runtimeManager.adapter.handleWebhook(payload, cmd.robot_id, cmd.correlation_id);
                 
                 if (!result.accepted) {
                     await this.completeCommand(cmd.command_id, 'FAILED', { validationErrors: result.validationErrors });

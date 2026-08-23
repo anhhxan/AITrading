@@ -79,7 +79,7 @@ export class TradingViewAdapter {
   }
 
 
-  public async handleWebhook(payload: TradingViewPayload, robotId: string): Promise<AdapterResult> {
+  public async handleWebhook(payload: TradingViewPayload, robotId: string, commandCorrelationId?: string): Promise<AdapterResult> {
     let expectedConfig = this.configs.get(robotId);
     let activeVersion = 1;
 
@@ -185,7 +185,7 @@ export class TradingViewAdapter {
     }
 
     let seq = this.sequences.get(robotId) || 1;
-    const correlationId = 'corr-' + payload.barTimestamp;
+    const correlationId = commandCorrelationId || ('corr-' + payload.barTimestamp);
     
     // Tạo Event INDICATOR_UPDATED_EVENT tương đương với kết quả của IndicatorEngine
     const trace1 = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewAdapter', seq++);
