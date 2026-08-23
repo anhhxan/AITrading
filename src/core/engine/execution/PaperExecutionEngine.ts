@@ -80,7 +80,8 @@ export class PaperExecutionEngine implements IEngine {
             quantity: existingPos.quantity,
             price: event.entryReferencePrice,
             leverage: existingPos.leverage,
-            status: 'FILLED'
+            status: 'FILLED',
+            correlation_id: existingPos.correlation_id // Keep original ID
           }).select('id').single();
 
           if (closeIntentData) {
@@ -98,7 +99,8 @@ export class PaperExecutionEngine implements IEngine {
                 filled_quantity: existingPos.quantity,
                 average_fill_price: event.entryReferencePrice,
                 status: 'FILLED',
-                role: 'EXIT'
+                role: 'EXIT',
+                correlation_id: existingPos.correlation_id // Keep original ID
               });
           }
 
@@ -116,6 +118,7 @@ export class PaperExecutionEngine implements IEngine {
               fee: 0,
               slippage: 0,
               reason: 'REVERSAL',
+              correlation_id: existingPos.correlation_id, // Keep original ID
               execution_symbol: existingPos.symbol,
               trading_view_symbol: ctx.tradingViewSymbol || event.tradingViewSymbol,
               timeframe: ctx.timeframe || event.timeframe,
@@ -154,7 +157,8 @@ export class PaperExecutionEngine implements IEngine {
           quantity: event.positionSize,
           price: event.entryReferencePrice,
           leverage: event.leverage,
-          status: 'FILLED'
+          status: 'FILLED',
+          correlation_id: event.trace.correlationId
         })
         .select('id')
         .single();
@@ -183,7 +187,8 @@ export class PaperExecutionEngine implements IEngine {
           filled_quantity: event.positionSize,
           average_fill_price: event.entryReferencePrice,
           status: 'FILLED',
-          role: 'ENTRY'
+          role: 'ENTRY',
+          correlation_id: event.trace.correlationId
         })
         .select('id')
         .single();
@@ -208,6 +213,7 @@ export class PaperExecutionEngine implements IEngine {
           realized_pnl: 0,
           stop_loss_price: event.stopLoss,
           take_profit_price: event.takeProfit,
+          correlation_id: event.trace.correlationId,
           context_snapshot: {
             executionSymbol: event.executionSymbol,
             tradingViewSymbol: event.tradingViewSymbol,
