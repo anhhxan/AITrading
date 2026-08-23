@@ -35,6 +35,34 @@ export default function TradeHistoryFilter({ robotId, initialTrades }: { robotId
     setVisibleCount(prev => prev + 10)
   }
 
+  const applyQuickFilter = (days: number | null, months: number | null = null) => {
+    if (days === null && months === null) {
+      // Clear filters -> All time
+      setStartDate('')
+      setEndDate('')
+      return
+    }
+
+    const end = new Date()
+    const start = new Date()
+
+    if (days !== null) {
+      start.setDate(end.getDate() - days)
+    } else if (months !== null) {
+      start.setMonth(end.getMonth() - months)
+    }
+
+    // Adjust for timezone offset to get correct local YYYY-MM-DD
+    const formatDate = (date: Date) => {
+      const offset = date.getTimezoneOffset()
+      const adjustedDate = new Date(date.getTime() - (offset*60*1000))
+      return adjustedDate.toISOString().split('T')[0]
+    }
+
+    setEndDate(formatDate(end))
+    setStartDate(formatDate(start))
+  }
+
   // Calculate summary over ALL fetched trades
   const totalTrades = trades.length;
   const wins = trades.filter(t => t.pnl > 0).length;
@@ -48,24 +76,37 @@ export default function TradeHistoryFilter({ robotId, initialTrades }: { robotId
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-6">
       <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h3 className="font-semibold text-slate-800">Trade History (Paper)</h3>
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col">
-            <label className="text-[10px] text-slate-500 font-medium uppercase mb-1">Từ ngày</label>
-            <input 
-              type="date" 
-              className="text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
+        
+        <div className="flex flex-col items-end gap-2">
+          {/* Date Pickers */}
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col">
+              <label className="text-[10px] text-slate-500 font-medium uppercase mb-1">Từ ngày</label>
+              <input 
+                type="date" 
+                className="text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col">
+              <label className="text-[10px] text-slate-500 font-medium uppercase mb-1">Đến ngày</label>
+              <input 
+                type="date" 
+                className="text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
           </div>
-          <div className="flex flex-col">
-            <label className="text-[10px] text-slate-500 font-medium uppercase mb-1">Đến ngày</label>
-            <input 
-              type="date" 
-              className="text-sm border border-slate-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
+
+          {/* Quick Filters */}
+          <div className="flex gap-2 mt-1 flex-wrap justify-end">
+            <button onClick={() => applyQuickFilter(7)} className="px-2 py-1 text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors">7 Ngày</button>
+            <button onClick={() => applyQuickFilter(10)} className="px-2 py-1 text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors">10 Ngày</button>
+            <button onClick={() => applyQuickFilter(null, 1)} className="px-2 py-1 text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors">1 Tháng</button>
+            <button onClick={() => applyQuickFilter(null, 2)} className="px-2 py-1 text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors">2 Tháng</button>
+            <button onClick={() => applyQuickFilter(null, null)} className="px-2 py-1 text-[11px] font-medium bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-md transition-colors">Tất cả</button>
           </div>
         </div>
       </div>
