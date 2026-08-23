@@ -3,6 +3,7 @@ import { Bot, Play, Square, Archive, Activity, FileText, CheckCircle } from 'luc
 import Link from 'next/link'
 import RobotControlPanel from './RobotControlPanel'
 import TestSignalButton from './TestSignalButton'
+import SignalPipelineMonitor from './SignalPipelineMonitor'
 
 export default async function RobotDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
@@ -147,6 +148,8 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
             status={robot.status} 
             tradingMode={robot.trading_mode} 
           />
+          
+          <SignalPipelineMonitor robotId={robot.id} />
 
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mt-6">
             <div className="px-6 py-4 border-b border-slate-100">
