@@ -233,6 +233,8 @@ export default function CreateRobotForm({ accounts }: { accounts: { id: string, 
                   <option value="1m">1m</option>
                   <option value="5m">5m</option>
                   <option value="15m">15m</option>
+                  <option value="30m">30m</option>
+                  <option value="45m">45m</option>
                   <option value="1h">1h</option>
                   <option value="3h">3h</option>
                   <option value="4h">4h</option>

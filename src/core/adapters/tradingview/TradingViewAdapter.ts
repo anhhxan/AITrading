@@ -70,6 +70,7 @@ export class TradingViewAdapter {
     if (tvTimeframe === '5') return '5m';
     if (tvTimeframe === '15') return '15m';
     if (tvTimeframe === '30') return '30m';
+    if (tvTimeframe === '45') return '45m';
     if (tvTimeframe === '60') return '1H';
     if (tvTimeframe === '120') return '2H';
     if (tvTimeframe === '180') return '3H';
