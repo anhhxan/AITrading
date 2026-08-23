@@ -8,37 +8,41 @@ export default function TradeHistoryFilter({ robotId, initialTrades }: { robotId
   const [loading, setLoading] = useState(false)
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [visibleCount, setVisibleCount] = useState(10)
 
   const fetchTrades = useCallback(async () => {
     setLoading(true)
-    // Convert local dates to ISO strings for Supabase range if needed
-    // Simple approach: YYYY-MM-DD
     let startIso = startDate ? new Date(startDate).toISOString() : undefined;
     let endIso = endDate ? new Date(endDate + 'T23:59:59.999Z').toISOString() : undefined;
     
     const res = await getTradeHistory(robotId, startIso, endIso)
     if (res.trades) {
       setTrades(res.trades)
+      setVisibleCount(10) // Reset to 10 when filters change
     }
     setLoading(false)
   }, [robotId, startDate, endDate])
 
   useEffect(() => {
-    // If user clears filters, reload defaults or just apply empty filters
     if (startDate !== '' || endDate !== '') {
       fetchTrades()
     } else {
-      // fallback to initial if both cleared? Or just fetch last 100
       fetchTrades()
     }
   }, [startDate, endDate, fetchTrades])
 
-  // Calculate summary
+  const handleLoadMore = () => {
+    setVisibleCount(prev => prev + 10)
+  }
+
+  // Calculate summary over ALL fetched trades
   const totalTrades = trades.length;
   const wins = trades.filter(t => t.pnl > 0).length;
   const losses = trades.filter(t => t.pnl <= 0).length;
   const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : '0.0';
   const totalPnL = trades.reduce((acc, t) => acc + (t.pnl || 0), 0).toFixed(2);
+
+  const visibleTrades = trades.slice(0, visibleCount);
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mt-6">
@@ -85,25 +89,38 @@ export default function TradeHistoryFilter({ robotId, initialTrades }: { robotId
         ) : !trades || trades.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-500">No trades found for selected period.</div>
         ) : (
-          trades.map((trade: any) => (
-            <div key={trade.id} className="p-4 text-sm flex justify-between items-center hover:bg-slate-50 transition-colors">
-              <div>
-                <div className="font-medium">{trade.action} {trade.amount} {trade.execution_symbol}</div>
-                <div className="text-xs text-slate-500 mt-1">Entry: {trade.entry_price || 'N/A'} | Exit: {trade.exit_price || 'N/A'}</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  Reason: <span className="font-semibold text-slate-600">{trade.reason || 'UNKNOWN'}</span>
-                  {' • '}
-                  Snapshot: <span className="font-semibold text-slate-600">{trade.execution_symbol} | {trade.timeframe || '15'}M | BB {trade.indicator_snapshot?.config?.length || '20'}</span>
+          <>
+            {visibleTrades.map((trade: any) => (
+              <div key={trade.id} className="p-4 text-sm flex justify-between items-center hover:bg-slate-50 transition-colors">
+                <div>
+                  <div className="font-medium">{trade.action} {trade.amount} {trade.execution_symbol}</div>
+                  <div className="text-xs text-slate-500 mt-1">Entry: {trade.entry_price || 'N/A'} | Exit: {trade.exit_price || 'N/A'}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    Reason: <span className="font-semibold text-slate-600">{trade.reason || 'UNKNOWN'}</span>
+                    {' • '}
+                    Snapshot: <span className="font-semibold text-slate-600">{trade.execution_symbol} | {trade.timeframe || '15'}M | BB {trade.indicator_snapshot?.config?.length || '20'}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`text-sm font-semibold ${trade.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    PnL: {trade.pnl > 0 ? '+' : ''}{Number(trade.pnl || 0).toFixed(4)}
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">{new Date(trade.created_at).toLocaleString()}</div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className={`text-sm font-semibold ${trade.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  PnL: {trade.pnl > 0 ? '+' : ''}{Number(trade.pnl || 0).toFixed(4)}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">{new Date(trade.created_at).toLocaleString()}</div>
+            ))}
+            
+            {visibleCount < trades.length && (
+              <div className="p-4 flex justify-center bg-white sticky bottom-0 border-t border-slate-100 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+                <button 
+                  onClick={handleLoadMore}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors"
+                >
+                  Xem thêm ({trades.length - visibleCount} lệnh nữa)
+                </button>
               </div>
-            </div>
-          ))
+            )}
+          </>
         )}
       </div>
     </div>
