@@ -1,7 +1,7 @@
-import { coreEventBus } from '../../infrastructure/EventBus';
-import { EventFactory } from '../../infrastructure/EventFactory';
-import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '../../../lib/supabase';
+import { randomUUID } from 'crypto';
+import { EventFactory } from '../../infrastructure/EventFactory';
+import { upsertSignalTrace } from '@/lib/diagnostics';
 
 export interface AdapterResult {
   accepted: boolean;
@@ -81,6 +81,16 @@ export class TradingViewAdapter {
 
 
   public async handleWebhook(payload: TradingViewPayload, robotId: string, commandCorrelationId?: string): Promise<AdapterResult> {
+    const correlationId = commandCorrelationId || ('corr-' + payload.barTimestamp);
+
+    console.log(JSON.stringify({
+      event: 'TV_ADAPTER_RECEIVED',
+      command_id: correlationId, // We don't have direct command_id here, but correlationId is passed
+      correlation_id: correlationId,
+      robot_id: robotId,
+      barTimestamp: payload.barTimestamp || 'unknown'
+    }));
+
     let expectedConfig = this.configs.get(robotId);
     let activeVersion = 1;
 
@@ -155,7 +165,7 @@ export class TradingViewAdapter {
 
     if (validationErrors.length > 0) {
       console.error(`[TradingViewAdapter] VALIDATION REJECTED:`, validationErrors);
-      return { accepted: false, validationErrors }; // STOP, KHÔNG CHẠY STRATEGY
+      return { accepted: false, validationErrors }; // STOP, KHA"NG CHY STRATEGY
     }
 
     // CANONICAL MAPPING
@@ -175,20 +185,76 @@ export class TradingViewAdapter {
     };
     
     let previousSnapshot = null;
-    if (payload.previousPayload && payload.previousPayload.plots) {
-      previousSnapshot = {
-        line1: payload.previousPayload.plots.upper,
-        line2: payload.previousPayload.plots.upper2,
-        line3: payload.previousPayload.plots.basis,
-        line4: payload.previousPayload.plots.lower2,
-        line5: payload.previousPayload.plots.lower,
-      };
+    let prevTimestamp = 'unknown';
+
+    if (payload.previousPayload) {
+      if (payload.previousPayload.barTimestamp) {
+        prevTimestamp = String(payload.previousPayload.barTimestamp);
+        
+        console.log(JSON.stringify({
+          event: 'TV_ADAPTER_PREVIOUS_CANDLE',
+          correlation_id: correlationId,
+          previousTimestamp: prevTimestamp
+        }));
+      }
+
+      if (payload.previousPayload.plots) {
+        previousSnapshot = {
+          line1: payload.previousPayload.plots.upper,
+          line2: payload.previousPayload.plots.upper2,
+          line3: payload.previousPayload.plots.basis,
+          line4: payload.previousPayload.plots.lower2,
+          line5: payload.previousPayload.plots.lower,
+        };
+      }
+    }
+
+    console.log(JSON.stringify({
+      event: 'TV_ADAPTER_CURRENT_CANDLE',
+      correlation_id: correlationId,
+      currentTimestamp: payload.barTimestamp
+    }));
+
+    if (prevTimestamp !== 'unknown' && typeof payload.barTimestamp === 'number') {
+      const delta_ms = payload.barTimestamp - Number(prevTimestamp);
+      console.log(JSON.stringify({
+        event: 'TV_ADAPTER_CANDLE_PAIR_READY',
+        correlation_id: correlationId,
+        previousTimestamp: prevTimestamp,
+        currentTimestamp: payload.barTimestamp,
+        delta_ms
+      }));
+      
+      let diagnostics: any = {};
+      
+      if (payload.timeframe === '1' && delta_ms !== 60000) {
+        diagnostics = { candle_gap: true, delta_ms };
+        console.log(JSON.stringify({
+          event: 'CANDLE_GAP_DETECTED',
+          correlation_id: correlationId,
+          previousTimestamp: prevTimestamp,
+          currentTimestamp: payload.barTimestamp,
+          delta_ms
+        }));
+      }
+
+      upsertSignalTrace({
+          robot_id: robotId,
+          bar_timestamp: payload.barTimestamp,
+          adapter_status: 'GREEN',
+          diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined
+      });
+    } else if (typeof payload.barTimestamp === 'number') {
+       upsertSignalTrace({
+          robot_id: robotId,
+          bar_timestamp: payload.barTimestamp,
+          adapter_status: 'GREEN'
+      });
     }
 
     let seq = this.sequences.get(robotId) || 1;
-    const correlationId = commandCorrelationId || ('corr-' + payload.barTimestamp);
     
-    // Tạo Event INDICATOR_UPDATED_EVENT tương đương với kết quả của IndicatorEngine
+    // To Event INDICATOR_UPDATED_EVENT tng `ng v>i kt qu c a IndicatorEngine
     const trace1 = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewAdapter', seq++);
     const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', robotId, activeVersion, trace1, { candle });
     

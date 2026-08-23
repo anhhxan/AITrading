@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { RuntimeManager } from './RuntimeManager';
 import { coreEventBus } from '@/core/infrastructure/EventBus';
+import { upsertSignalTrace } from '@/lib/diagnostics';
 
 export class CommandPoller {
     private isPolling = false;
@@ -37,6 +38,22 @@ export class CommandPoller {
             } else if (commands && commands.length > 0) {
                 const cmd = commands[0];
                 
+                console.log(JSON.stringify({
+                    event: 'COMMAND_POLLER_FOUND',
+                    command_id: cmd.command_id,
+                    correlation_id: cmd.correlation_id,
+                    robot_id: cmd.robot_id,
+                    barTimestamp: cmd.result?.barTimestamp || 'unknown'
+                }));
+                
+                if (cmd.command_type === 'TV_SIGNAL' && cmd.result?.barTimestamp) {
+                    upsertSignalTrace({
+                        robot_id: cmd.robot_id,
+                        bar_timestamp: Number(cmd.result.barTimestamp),
+                        poller_status: 'GREEN'
+                    });
+                }
+
                 // Optimistic lock: update to PROCESSING
                 const { data: updated, error: lockErr } = await this.supabase
                     .from('robot_commands')
@@ -47,6 +64,12 @@ export class CommandPoller {
                     .single();
 
                 if (!lockErr && updated) {
+                    console.log(JSON.stringify({
+                        event: 'COMMAND_POLLER_PROCESSING',
+                        command_id: updated.command_id,
+                        correlation_id: updated.correlation_id,
+                        barTimestamp: updated.result?.barTimestamp || 'unknown'
+                    }));
                     await this.processCommand(updated);
                 }
             }
@@ -60,8 +83,6 @@ export class CommandPoller {
     }
 
     private async processCommand(cmd: any) {
-        console.log(`[CommandPoller] Processing command ${cmd.command_type} for robot ${cmd.robot_id}`);
-        
         try {
             if (cmd.command_type === 'START') {
                 await this.runtimeManager.getOrCreateRuntime(cmd.robot_id);
@@ -104,6 +125,13 @@ export class CommandPoller {
                     payload.previousPayload = lastCmd.result.payload || lastCmd.result; 
                 }
 
+                console.log(JSON.stringify({
+                    event: 'COMMAND_POLLER_DISPATCH',
+                    command_id: cmd.command_id,
+                    correlation_id: cmd.correlation_id,
+                    barTimestamp: payload.barTimestamp || 'unknown'
+                }));
+
                 const result = await this.runtimeManager.adapter.handleWebhook(payload, cmd.robot_id, cmd.correlation_id);
                 
                 if (!result.accepted) {
@@ -131,7 +159,12 @@ export class CommandPoller {
                 await this.completeCommand(cmd.command_id, 'FAILED', { error: 'Unknown command_type' });
             }
         } catch (err: any) {
-            console.error(`[CommandPoller] Error processing command:`, err);
+            console.log(JSON.stringify({
+                event: 'COMMAND_POLLER_ERROR',
+                command_id: cmd.command_id,
+                correlation_id: cmd.correlation_id,
+                safe_error: err.message || 'Unknown processing error'
+            }));
             await this.completeCommand(cmd.command_id, 'FAILED', { error: err.message });
         }
     }

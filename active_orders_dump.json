@@ -1,0 +1,20 @@
+[
+  {
+    "id": "bdf108f6-ef7e-44cd-bcd5-ba5e9d132c09",
+    "intent_id": "245f9c4f-b4bb-457c-b82e-0364c824e25a",
+    "robot_id": "f1610ab1-3177-4930-81fc-6cd98262d7b6",
+    "binance_order_id": "MOCK-BINANCE-PAPER-f1610ab1-a7c81cca",
+    "client_order_id": "PAPER-f1610ab1-a7c81cca",
+    "symbol": "BTCUSDT",
+    "side": "BUY",
+    "order_type": "LIMIT",
+    "quantity": 0.025926635358101843,
+    "price": 77205.82,
+    "filled_quantity": 0.025926635358101843,
+    "average_fill_price": 77205.82,
+    "status": "FILLED",
+    "role": "ENTRY",
+    "created_at": "2026-08-23T17:17:08.005567+00:00",
+    "updated_at": "2026-08-23T17:17:08.005567+00:00"
+  }
+]

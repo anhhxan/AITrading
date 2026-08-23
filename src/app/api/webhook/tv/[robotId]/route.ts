@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { upsertSignalTrace } from '@/lib/diagnostics';
 import crypto from 'crypto';
 
 export async function GET(req: NextRequest) {
@@ -20,34 +21,86 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     const vercel_received_at = Date.now();
     const resolvedParams = await params;
     const robotId = resolvedParams.robotId;
+    const request_id = req.headers.get('x-cf-request-id') || ('req_' + crypto.randomUUID().replace(/-/g, '').substring(0, 12));
     
     // Authentication
     const authHeader = req.headers.get('authorization');
     const expectedSecret = process.env.TV_WEBHOOK_SECRET;
     
+    let payload;
+    let rawPayloadStr = '';
+    let barTimestamp = 'unknown';
+    let timeframe = 'unknown';
+    let tvSymbol = 'unknown';
+
+    try {
+        rawPayloadStr = await req.text();
+        payload = JSON.parse(rawPayloadStr);
+
+        if (payload.barTimestamp) {
+            barTimestamp = String(payload.barTimestamp);
+            const ts = Number(payload.barTimestamp);
+            if (!Number.isFinite(ts)) throw new Error("INVALID_BAR_TIMESTAMP");
+            payload.barTimestamp = ts;
+        }
+        if (payload.timeframe) timeframe = String(payload.timeframe);
+        if (payload.tvSymbol || payload.symbol) tvSymbol = String(payload.tvSymbol || payload.symbol);
+    } catch(e) {
+        // Will reject below
+    }
+
+    console.log(JSON.stringify({
+        event: 'VERCEL_RECEIVED',
+        request_id,
+        robot_id: robotId,
+        barTimestamp,
+        timeframe,
+        tvSymbol,
+        received_at: new Date(vercel_received_at).toISOString()
+    }));
+    
+    // Best effort diagnostic: Initial Received (Also assumes CF received & forwarded if it has x-cf-request-id)
+    if (barTimestamp !== 'unknown') {
+        upsertSignalTrace({
+            robot_id: robotId,
+            bar_timestamp: Number(barTimestamp),
+            timeframe,
+            tv_symbol: tvSymbol,
+            request_id,
+            cf_status: req.headers.get('x-cf-request-id') ? 'GREEN' : 'UNKNOWN',
+            vercel_status: 'GREEN'
+        });
+    }
+
     if (!expectedSecret) {
         return NextResponse.json({ error: 'SERVER_MISCONFIGURED' }, { status: 500 });
     }
     
     const authVal = authHeader ? authHeader.replace('Bearer ', '') : '';
-    if (authVal !== expectedSecret) {
+    const auth_valid = authVal === expectedSecret;
+    
+    console.log(JSON.stringify({
+        event: 'VERCEL_AUTH_RESULT',
+        request_id,
+        auth_valid
+    }));
+
+    if (!auth_valid) {
+        if (barTimestamp !== 'unknown') upsertSignalTrace({ robot_id: robotId, bar_timestamp: Number(barTimestamp), vercel_status: 'RED' });
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    
-    let payload;
-    try {
-        const rawPayloadStr = await req.text();
-        payload = JSON.parse(rawPayloadStr);
 
-        if (payload.barTimestamp) {
-            const ts = Number(payload.barTimestamp);
-            if (!Number.isFinite(ts)) throw new Error("INVALID_BAR_TIMESTAMP");
-            payload.barTimestamp = ts;
-        }
-    } catch(e) {
+    if (!payload) {
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
     
+    console.log(JSON.stringify({
+        event: 'VERCEL_TIMESTAMP_CHECK',
+        request_id,
+        barTimestamp,
+        valid: typeof payload.barTimestamp === 'number'
+    }));
+
     const supabase = getSupabaseAdmin();
 
     // Verify robot exists and is RUNNING
@@ -57,6 +110,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         .eq('id', robotId)
         .single();
         
+    console.log(JSON.stringify({
+        event: 'VERCEL_ROBOT_CHECK',
+        request_id,
+        robot_id: robotId,
+        robot_exists: !!robot && !robotError,
+        robot_status: robot?.status || 'UNKNOWN',
+        trading_enabled: true // Always true for now unless we need to check another field
+    }));
+
     if (robotError || !robot) {
         return NextResponse.json({ error: 'ROBOT_NOT_FOUND' }, { status: 404 });
     }
@@ -73,6 +135,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     const payloadStr = JSON.stringify(payload);
     const hash = crypto.createHash('md5').update(payloadStr).digest('hex');
     const deterministicCommandId = `${hash.slice(0,8)}-${hash.slice(8,12)}-4${hash.slice(13,16)}-a${hash.slice(17,20)}-${hash.slice(20,32)}`;
+    const hash_prefix = hash.slice(0, 10);
+    const correlation_id = `tv_${hash_prefix}_${Date.now()}`;
 
     // Insert command as PENDING so Worker can pick it up
     const { error: cmdError } = await supabase.from('robot_commands').insert({
@@ -80,22 +144,58 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         command_id: deterministicCommandId,
         command_type: 'TV_SIGNAL',
         status: 'RECEIVED',
-        correlation_id: `tv_${hash.slice(0, 10)}_${Date.now()}`,
+        correlation_id: correlation_id,
         result: payload 
     });
 
+    console.log(JSON.stringify({
+        event: 'VERCEL_IDEMPOTENCY_CHECK',
+        request_id,
+        hash_prefix,
+        duplicate: cmdError && cmdError.code === '23505'
+    }));
+
     if (cmdError && cmdError.code === '23505') {
-        console.log(`[TV WEBHOOK] Idempotent drop: duplicate command_id ${deterministicCommandId}`);
         return NextResponse.json({ status: 'OK', message: 'Duplicate acknowledged' }, { status: 200 });
     }
 
     if (cmdError) {
-        console.error('[TV WEBHOOK] Failed to insert command:', cmdError.message);
+        console.log(JSON.stringify({
+            event: 'VERCEL_DB_ERROR',
+            request_id,
+            safe_error_code: cmdError.code || 'UNKNOWN',
+            safe_error_message: cmdError.message || 'Unknown database error'
+        }));
+        
+        upsertSignalTrace({ 
+            robot_id: robotId, 
+            bar_timestamp: Number(barTimestamp), 
+            db_status: 'RED',
+            command_id: deterministicCommandId,
+            correlation_id
+        });
+
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
+    console.log(JSON.stringify({
+        event: 'VERCEL_DB_INSERT',
+        request_id,
+        command_id: deterministicCommandId,
+        correlation_id,
+        barTimestamp,
+        db_insert_success: true
+    }));
+
+    upsertSignalTrace({ 
+        robot_id: robotId, 
+        bar_timestamp: Number(barTimestamp), 
+        db_status: 'GREEN',
+        command_id: deterministicCommandId,
+        correlation_id
+    });
+
     if (payload.isTest) {
-        console.log(`[WEBHOOK] TEST_ID=${payload.testId}`);
         const { error: eventErr } = await supabase.from('core_events').insert({
             robot_id: robotId,
             event_id: crypto.randomUUID(),
@@ -109,19 +209,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
                 received_at: new Date().toISOString()
             }
         });
-        if (eventErr) {
-            console.error(`[WEBHOOK] Failed to insert core_events TEST_ID=${payload.testId}`, eventErr);
-        }
-    } else {
-        console.log(`[WEBHOOK] REAL_SIGNAL`);
-        console.log(`[WEBHOOK] robot_id=${robotId}`);
-        console.log(`[WEBHOOK] symbol=${payload.tvSymbol || payload.symbol || 'UNKNOWN'}`);
-        console.log(`[WEBHOOK] side=${payload.action || payload.side || 'UNKNOWN'}`);
-        console.log(`[WEBHOOK] mode=${robot.trading_mode}`);
     }
-
-    const vercel_response_at = Date.now();
-    console.log(`[VERCEL WEBHOOK] Received and Queued robot ${robotId}. Latency: ${vercel_response_at - vercel_received_at}ms`);
 
     return NextResponse.json({ status: 'OK', message: 'Accepted for processing' }, { status: 200 });
 }

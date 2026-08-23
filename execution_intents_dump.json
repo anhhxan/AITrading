@@ -1,0 +1,18 @@
+[
+  {
+    "id": "245f9c4f-b4bb-457c-b82e-0364c824e25a",
+    "robot_id": "f1610ab1-3177-4930-81fc-6cd98262d7b6",
+    "signal_id": "a7c81cca-03d9-4c65-9b8a-44f889be68d5",
+    "client_order_id": "PAPER-f1610ab1-a7c81cca",
+    "action": "OPEN_LONG",
+    "symbol": "BTCUSDT",
+    "order_type": "LIMIT",
+    "quantity": 0.025926635358101843,
+    "price": 77205.82,
+    "leverage": 1,
+    "status": "FILLED",
+    "error_reason": null,
+    "created_at": "2026-08-23T17:17:07.808229+00:00",
+    "updated_at": "2026-08-23T17:17:07.808229+00:00"
+  }
+]

@@ -4,6 +4,7 @@ import { PluginLoader } from "../runtime/PluginLoader";
 import { IStrategy } from "../../interfaces/PluginInterfaces";
 import { IEngine } from "../runtime/IEngine";
 import { IndicatorUpdatedEvent } from "../indicators/IndicatorEngine";
+import { upsertSignalTrace } from '@/lib/diagnostics';
 
 export interface StrategySignalEvent extends BaseEvent {
   direction: 'LONG' | 'SHORT' | 'NONE';
@@ -34,6 +35,7 @@ export class StrategyEngine implements IEngine {
   
   private robotConfig: Map<string, IStrategy> = new Map();
   private currentPrices: Map<string, number> = new Map();
+  private currentTimestamps: Map<string, number> = new Map();
   private unsubs: (() => void)[] = [];
 
   public async initialize(): Promise<void> {
@@ -41,6 +43,7 @@ export class StrategyEngine implements IEngine {
     
     this.unsubs.push(coreEventBus.subscribe('CANDLE_CLOSED', async (event: any) => {
        this.currentPrices.set(event.robotId, event.candle.close);
+       this.currentTimestamps.set(event.robotId, event.candle.timestamp);
     }));
 
     this.unsubs.push(coreEventBus.subscribe('INDICATOR_UPDATED', async (event: IndicatorUpdatedEvent) => {
@@ -64,16 +67,61 @@ export class StrategyEngine implements IEngine {
     // Fallback to first indicator if explicitly named one isn't found
     const indicatorSnapshot = event.indicators['BB_MB'] || Object.values(event.indicators)[0];
     const currentPrice = this.currentPrices.get(robotId) || 0;
+    const barTimestamp = this.currentTimestamps.get(robotId) || 'unknown';
+    const previousClose = (event as any).previousClose;
+    const previousSnapshot = (event as any).previousSnapshot || null;
 
     const signal = PluginLoader.safeEvaluateStrategy(strategy, {
       robotId,
       indicatorSnapshot,
-      previousSnapshot: (event as any).previousSnapshot || null,
+      previousSnapshot,
       currentPrice,
-      previousClose: (event as any).previousClose // FIX 3: Pass down persistent previous close
+      previousClose // FIX 3: Pass down persistent previous close
     });
 
-    console.log(`[StrategyEngine] EVALUATED SIGNAL:`, signal);
+    const direction = signal === 'ERROR' ? 'ERROR' : (signal?.direction || 'NONE');
+
+    let diagnostics = {};
+    if (direction === 'NONE' || direction === 'LONG' || direction === 'SHORT') {
+       if (previousSnapshot && indicatorSnapshot && previousClose !== undefined) {
+         // Reconstruct the logic for logging purposes without changing it
+         const LONG_C1 = previousClose < previousSnapshot.line5;
+         const LONG_C2 = previousClose <= previousSnapshot.line4;
+         const LONG_C3 = currentPrice > indicatorSnapshot.line5;
+
+         const SHORT_C1 = previousClose >= previousSnapshot.line2;
+         const SHORT_C2 = previousClose > previousSnapshot.line1;
+         const SHORT_C3 = currentPrice < indicatorSnapshot.line1;
+         
+         diagnostics = {
+           LONG_C1, LONG_C2, LONG_C3,
+           SHORT_C1, SHORT_C2, SHORT_C3,
+           prevClose: previousClose,
+           currClose: currentPrice,
+           prevSnapshot: previousSnapshot,
+           currSnapshot: indicatorSnapshot
+         };
+       }
+    }
+
+    console.log(JSON.stringify({
+      event: 'STRATEGY_EVALUATED',
+      correlation_id: event.trace.correlationId,
+      robot_id: robotId,
+      barTimestamp,
+      result: direction,
+      diagnostics
+    }));
+    
+    if (barTimestamp !== 'unknown') {
+        upsertSignalTrace({
+            robot_id: robotId,
+            bar_timestamp: Number(barTimestamp),
+            strategy_status: 'GREEN',
+            strategy_result: direction,
+            diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined
+        });
+    }
 
     // ==========================================
     // OBSERVABILITY EVENT (Always published, even for NONE)
@@ -90,8 +138,8 @@ export class StrategyEngine implements IEngine {
       robotId, event.configVersion || 1,
       evalTrace,
       {
-        direction: signal === 'ERROR' ? 'ERROR' : (signal?.direction || 'NONE'),
-        result: signal === 'ERROR' ? 'ERROR' : (signal?.direction || 'NONE'),
+        direction,
+        result: direction,
         commandId: event.trace.correlationId,
         strategyId: strategy.name
       }
