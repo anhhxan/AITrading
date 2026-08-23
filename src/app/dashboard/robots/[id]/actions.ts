@@ -147,3 +147,35 @@ export async function toggleTradingAction(robotId: string, enabled: boolean) {
   revalidatePath(`/dashboard/robots/${robotId}`)
   return { success: true }
 }
+
+
+export async function getTradeHistory(robotId: string, startDate?: string, endDate?: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not authenticated' }
+
+  let query = supabase
+    .from('trade_history')
+    .select('*')
+    .eq('robot_id', robotId)
+    .order('created_at', { ascending: false })
+
+  if (startDate) {
+    query = query.gte('created_at', startDate)
+  }
+  if (endDate) {
+    query = query.lte('created_at', endDate)
+  }
+
+  // To prevent loading too many at once if date is too large, limit to 1000
+  query = query.limit(1000)
+
+  const { data, error } = await query
+  
+  if (error) {
+    console.error('Fetch trade history error:', error)
+    return { error: error.message }
+  }
+
+  return { trades: data }
+}

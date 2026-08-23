@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Bot, Play, Square, Archive, Activity, FileText, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import RobotControlPanel from './RobotControlPanel'
+import TradeHistoryFilter from './TradeHistoryFilter'
 import TestSignalButton from './TestSignalButton'
 import SignalPipelineMonitor from './SignalPipelineMonitor'
 
@@ -434,36 +435,7 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
             </div>
           </div>
           
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-800">Trade History (Paper)</h3>
-            </div>
-            <div className="divide-y divide-slate-100">
-                {!trades || trades.length === 0 ? (
-                  <div className="p-4 text-sm text-slate-500">No trades yet.</div>
-                ) : (
-                  trades.map((trade: any) => (
-                    <div key={trade.id} className="p-4 text-sm flex justify-between items-center">
-                      <div>
-                        <div className="font-medium">{trade.action} {trade.amount} {robot.execution_symbol}</div>
-                        <div className="text-xs text-slate-500 mt-1">Entry: {trade.entry_price || 'N/A'} | Exit: {trade.exit_price || 'N/A'}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          Reason: <span className="font-semibold text-slate-600">{trade.reason || 'UNKNOWN'}</span>
-                          <span className="mx-2">•</span>
-                          Snapshot: <span className="font-semibold text-slate-600">{trade.execution_symbol} | {trade.timeframe || '15'}M | BB {trade.indicator_snapshot?.config?.length || '20'}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className={`text-sm font-semibold ${trade.pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          PnL: {trade.pnl > 0 ? '+' : ''}{trade.pnl || 0}
-                        </div>
-                        <div className="text-xs text-slate-400 mt-1">{new Date(trade.created_at).toLocaleString()}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
-            </div>
-          </div>
+          <TradeHistoryFilter robotId={resolvedParams.id} initialTrades={trades || []} />
       </div>
     </div>
   )
