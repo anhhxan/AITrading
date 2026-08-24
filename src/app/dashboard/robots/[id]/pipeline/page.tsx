@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 const StatusDot = ({ status }: { status?: string }) => {
     if (status === 'GREEN') return <div className="h-3 w-3 rounded-full bg-green-500 mx-auto" title="GREEN (Processed)" />;
     if (status === 'RED') return <div className="h-3 w-3 rounded-full bg-red-500 mx-auto" title="RED (Error)" />;
-    return <div className="h-3 w-3 rounded-full bg-zinc-700 mx-auto border border-zinc-600" title="UNKNOWN / NOT OBSERVED" />;
+    return <div className="h-3 w-3 rounded-full bg-slate-200 mx-auto border border-slate-300" title="UNKNOWN / NOT OBSERVED" />;
 };
 
 function getFirstBreak(trace: any) {
@@ -242,35 +242,35 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
             )}
 
             {/* A & B. PIPELINE TRACE (Realtime & History) */}
-            <Card className="bg-black text-white border-zinc-800">
-                <CardHeader className="flex flex-row items-center justify-between py-4">
-                    <CardTitle className="text-lg">Realtime Pipeline Trace</CardTitle>
-                    <div className="text-xs text-zinc-400">Displaying recent {traces.length} observations</div>
+            <Card className="bg-white border-slate-200 shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between py-4 border-b border-slate-100">
+                    <CardTitle className="text-lg text-slate-800">Realtime Pipeline Trace</CardTitle>
+                    <div className="text-xs text-slate-500 font-medium">Displaying recent {traces.length} observations</div>
                 </CardHeader>
-                <CardContent>
-                    <div className="rounded-md border border-zinc-800 overflow-x-auto max-h-[600px]">
+                <CardContent className="p-0">
+                    <div className="overflow-x-auto max-h-[600px]">
                         <Table>
-                            <TableHeader className="sticky top-0 bg-black z-10">
-                                <TableRow className="border-zinc-800 hover:bg-transparent">
-                                    <TableHead className="w-[150px] text-zinc-400">Bar Time</TableHead>
-                                    <TableHead className="text-center text-zinc-400 w-[60px]">TV</TableHead>
-                                    <TableHead className="text-center text-zinc-400 w-[60px]">CF</TableHead>
-                                    <TableHead className="text-center text-zinc-400 w-[80px]">Vercel</TableHead>
-                                    <TableHead className="text-center text-zinc-400 w-[60px]">DB</TableHead>
-                                    <TableHead className="text-center text-zinc-400 w-[80px]">Poller</TableHead>
-                                    <TableHead className="text-center text-zinc-400 w-[80px]">Adapter</TableHead>
-                                    <TableHead className="text-left text-zinc-400 w-[120px]">Strategy</TableHead>
-                                    <TableHead className="text-right text-zinc-400">Correlation ID</TableHead>
+                            <TableHeader className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200">
+                                <TableRow className="hover:bg-slate-50">
+                                    <TableHead className="w-[150px] text-slate-600 font-semibold">Bar Time</TableHead>
+                                    <TableHead className="text-center text-slate-600 font-semibold w-[60px]">TV</TableHead>
+                                    <TableHead className="text-center text-slate-600 font-semibold w-[60px]">CF</TableHead>
+                                    <TableHead className="text-center text-slate-600 font-semibold w-[80px]">Vercel</TableHead>
+                                    <TableHead className="text-center text-slate-600 font-semibold w-[60px]">DB</TableHead>
+                                    <TableHead className="text-center text-slate-600 font-semibold w-[80px]">Poller</TableHead>
+                                    <TableHead className="text-center text-slate-600 font-semibold w-[80px]">Adapter</TableHead>
+                                    <TableHead className="text-left text-slate-600 font-semibold w-[120px]">Strategy</TableHead>
+                                    <TableHead className="text-right text-slate-600 font-semibold">Correlation ID</TableHead>
                                 </TableRow>
                             </TableHeader>
-                            <TableBody>
+                            <TableBody className="divide-y divide-slate-100">
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={9} className="text-center py-8">Loading pipeline traces...</TableCell>
+                                        <TableCell colSpan={9} className="text-center py-8 text-slate-500">Loading pipeline traces...</TableCell>
                                     </TableRow>
                                 ) : traces.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={9} className="text-center py-8 text-zinc-500">No traces found for this robot.</TableCell>
+                                        <TableCell colSpan={9} className="text-center py-8 text-slate-500">No traces found for this robot.</TableCell>
                                     </TableRow>
                                 ) : (
                                     traces.map((trace) => {
@@ -281,13 +281,13 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                                         return (
                                             <TableRow 
                                                 key={trace.candle_trace_id} 
-                                                className="border-zinc-800 hover:bg-zinc-900 cursor-pointer font-mono text-xs"
+                                                className="hover:bg-slate-50 cursor-pointer font-mono text-xs transition-colors"
                                                 title={`Received at: ${new Date(trace.created_at).toISOString()}`}
                                             >
-                                                <TableCell className="font-medium text-zinc-300">
+                                                <TableCell className="font-medium text-slate-900">
                                                     <div className="flex flex-col">
-                                                        <span>UTC: {utcTime}</span>
-                                                        <span className="text-zinc-500">VN: {vnTime}</span>
+                                                        <span className="font-bold">UTC: {utcTime}</span>
+                                                        <span className="text-slate-500 mt-0.5 font-medium">VN: {vnTime}</span>
                                                     </div>
                                                 </TableCell>
                                                 
@@ -302,23 +302,23 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                                                     <div className="flex items-center space-x-3">
                                                         <StatusDot status={trace.strategy_status} />
                                                         {trace.strategy_status === 'GREEN' && trace.strategy_result && (
-                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
-                                                                trace.strategy_result === 'LONG' ? 'bg-green-900/50 text-green-400' :
-                                                                trace.strategy_result === 'SHORT' ? 'bg-red-900/50 text-red-400' :
-                                                                'bg-zinc-800 text-zinc-400'
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
+                                                                trace.strategy_result === 'LONG' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                                                                trace.strategy_result === 'SHORT' ? 'bg-rose-100 text-rose-700 border-rose-200' :
+                                                                'bg-slate-100 text-slate-600 border-slate-200'
                                                             }`}>
                                                                 {trace.strategy_result}
                                                             </span>
                                                         )}
                                                         {trace.strategy_status !== 'GREEN' && (
-                                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800/50 text-zinc-500">
+                                                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-slate-100 text-slate-500 border border-slate-200">
                                                                 WAITING
                                                             </span>
                                                         )}
                                                     </div>
                                                 </TableCell>
                                                 
-                                                <TableCell className="text-right text-zinc-500 text-[10px] max-w-[120px] truncate" title={trace.correlation_id}>
+                                                <TableCell className="text-right text-slate-400 text-[10px] max-w-[120px] truncate" title={trace.correlation_id}>
                                                     {trace.correlation_id || 'None'}
                                                 </TableCell>
                                             </TableRow>
