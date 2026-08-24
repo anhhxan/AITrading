@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, use } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
@@ -28,39 +28,78 @@ function getFirstBreak(trace: any) {
     return nodes[maxGreen + 1];
 }
 
-export default function SignalPipelineMonitor({ params }: { params: { id: string } }) {
-    const robotId = params.id;
+export default function SignalPipelineMonitor({ params }: { params: Promise<{ id: string }> }) {
+    const resolvedParams = use(params);
+    const robotId = resolvedParams.id;
     const supabase = createClient();
     
     const [traces, setTraces] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [robotStatus, setRobotStatus] = useState<any>(null);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     useEffect(() => {
+        if (!robotId || robotId === '') {
+            setErrorMsg("Robot ID unavailable");
+            console.error("[PIPELINE_MONITOR] Robot ID unavailable");
+            setLoading(false);
+            return;
+        }
+
+        console.log(`[PIPELINE_MONITOR] robotId = ${robotId}`);
+
         async function fetchData() {
-            const { data: events, error } = await supabase
-                .from('signal_trace_events')
-                .select('*')
-                .eq('robot_id', robotId)
-                .order('bar_timestamp', { ascending: false })
-                .limit(1000);
+            setLoading(true);
+            setErrorMsg(null);
+            
+            try {
+                const { data: events, error: eventsError } = await supabase
+                    .from('signal_trace_events')
+                    .select('*')
+                    .eq('robot_id', robotId)
+                    .order('bar_timestamp', { ascending: false })
+                    .limit(1000);
 
-            if (!error && events) {
-                setTraces(events);
+                if (eventsError) {
+                    console.error("[PIPELINE_MONITOR] signal_trace_events query failed", {
+                        robotId,
+                        message: eventsError.message,
+                        code: eventsError.code,
+                        details: eventsError.details
+                    });
+                    setErrorMsg(`Query failed: ${eventsError.message}`);
+                    setLoading(false);
+                    return;
+                }
+
+                if (events) {
+                    setTraces(events);
+                    console.log(`[PIPELINE_MONITOR] trace count = ${events.length}`);
+                }
+
+                const { data: robot, error: robotError } = await supabase
+                    .from('robots')
+                    .select('status, last_heartbeat_at')
+                    .eq('id', robotId)
+                    .single();
+                
+                if (robotError) {
+                    console.error("[PIPELINE_MONITOR] robots query failed", robotError);
+                } else if (robot) {
+                    setRobotStatus(robot);
+                    console.log(`[PIPELINE_MONITOR] heartbeat robotId = ${robotId} (${robot.last_heartbeat_at})`);
+                }
+
+            } catch (err: any) {
+                console.error("[PIPELINE_MONITOR] Unexpected error", err);
+                setErrorMsg(`Unexpected error: ${err.message}`);
             }
-
-            const { data: robot } = await supabase
-                .from('robots')
-                .select('status, last_heartbeat_at')
-                .eq('id', robotId)
-                .single();
-            if (robot) setRobotStatus(robot);
-
+            
             setLoading(false);
         }
+        
         fetchData();
         
-        // Optional: setup realtime subscription
         const sub = supabase.channel('signal_trace')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'signal_trace_events', filter: `robot_id=eq.${robotId}` }, () => {
                 fetchData();
@@ -77,7 +116,6 @@ export default function SignalPipelineMonitor({ params }: { params: { id: string
         const firstCandle = sorted[0].bar_timestamp;
         const lastCandle = sorted[sorted.length - 1].bar_timestamp;
         
-        // Timeframe 1M = 60,000ms
         const expectedCount = Math.floor((lastCandle - firstCandle) / 60000) + 1;
         const receivedCount = traces.length;
         const missingCount = expectedCount - receivedCount;
@@ -91,7 +129,6 @@ export default function SignalPipelineMonitor({ params }: { params: { id: string
             else (breaks as any)[fb] = ((breaks as any)[fb] || 0) + 1;
         });
         
-        // Also account for missing candles as NOT_OBSERVED breaks
         if (missingCount > 0) {
             breaks.NOT_OBSERVED += missingCount;
         }
@@ -100,7 +137,6 @@ export default function SignalPipelineMonitor({ params }: { params: { id: string
             .filter(([k,v]) => v > 0)
             .sort((a,b) => b[1] - a[1])[0];
 
-        // Detect specific gaps for analysis
         const gaps = [];
         for (let i = 0; i < sorted.length - 1; i++) {
             const current = sorted[i].bar_timestamp;
@@ -112,7 +148,6 @@ export default function SignalPipelineMonitor({ params }: { params: { id: string
                     from: current,
                     to: next,
                     missing: missingInGap,
-                    // If a candle is missing, it's not in the DB, so we have NO evidence
                     firstBreak: 'UNKNOWN / NOT_OBSERVED'
                 });
             }
@@ -130,8 +165,14 @@ export default function SignalPipelineMonitor({ params }: { params: { id: string
                     <h1 className="text-2xl font-bold">PAPER 1M — SIGNAL MONITOR</h1>
                     <p className="text-muted-foreground">Forensic Observability for 1M Webhook Signal Pipeline</p>
                 </div>
-                <Badge variant="outline" className="text-sm font-mono">{robotId}</Badge>
+                <Badge variant="outline" className="text-sm font-mono">{robotId || 'Unknown ID'}</Badge>
             </div>
+            
+            {errorMsg && (
+                <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                    <strong>Error:</strong> {errorMsg}
+                </div>
+            )}
 
             {/* D. SUMMARY PANEL */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -250,7 +291,6 @@ export default function SignalPipelineMonitor({ params }: { params: { id: string
                                                     </div>
                                                 </TableCell>
                                                 
-                                                {/* Enforce TV is UNKNOWN unless explicit GREEN in DB */}
                                                 <TableCell><StatusDot status={trace.tv_status === 'GREEN' ? 'GREEN' : 'UNKNOWN'} /></TableCell>
                                                 <TableCell><StatusDot status={trace.cf_status} /></TableCell>
                                                 <TableCell><StatusDot status={trace.vercel_status} /></TableCell>
