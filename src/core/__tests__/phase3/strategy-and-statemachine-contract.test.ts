@@ -21,7 +21,7 @@ describe('Phase 3 Contract: State Machine Rules', () => {
 
     sm = new StateMachineEngine();
     await sm.initialize();
-    sm.registerRobot('test-robot', 3); // maxTimeout = 3
+    sm.registerRobot('robot-1', '1m'); // maxTimeout = 3
   });
 
   const createSignal = (direction: 'LONG' | 'SHORT' | 'NONE', correlationId: string, entryTrigger: any = null, sequence: number = 100): StrategySignalEvent => {

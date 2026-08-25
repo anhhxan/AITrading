@@ -44,6 +44,9 @@ export class StateMachineEngine implements IEngine {
   private states: Map<string, RobotState> = new Map();
   private timeoutCounts: Map<string, number> = new Map();
   private activeSignals: Map<string, StrategySignalEvent> = new Map();
+  private signalSystemTimestamps: Map<string, number> = new Map(); // Kept for backwards compatibility if needed, but not used for business logic
+  private robotTimeframes: Map<string, string> = new Map();
+  private intervalId: any;
 
   private unsubs: (() => void)[] = [];
 
@@ -70,10 +73,26 @@ export class StateMachineEngine implements IEngine {
        await this.handleRiskRejected(e);
     }));
 
+    this.intervalId = setInterval(() => this.checkTimeouts(), 5000);
+
     this.status = 'READY';
   }
 
-  public registerRobot(robotId: string, _legacyMaxTimeout: number = 3) {
+  private getTimeframeDurationMs(timeframe: string): number {
+      const tf = timeframe.toLowerCase();
+      if (tf === '1m') return 60000;
+      if (tf === '3m') return 3 * 60000;
+      if (tf === '5m') return 5 * 60000;
+      if (tf === '10m') return 10 * 60000;
+      if (tf === '15m') return 15 * 60000;
+      if (tf === '30m') return 30 * 60000;
+      if (tf === '45m') return 45 * 60000;
+      if (tf === '1h') return 60 * 60000;
+      return 60000; // default 1m
+  }
+
+  public registerRobot(robotId: string, timeframe: string = '1m') {
+    this.robotTimeframes.set(robotId, timeframe.toLowerCase());
     this.states.set(robotId, RobotState.WAIT_SIGNAL);
   }
 
@@ -94,7 +113,21 @@ export class StateMachineEngine implements IEngine {
       this.states.set(robotId, RobotState.WAIT_RETRACEMENT);
       this.activeSignals.set(robotId, event);
       this.timeoutCounts.set(robotId, 0); // Reset timeout
+      // signalSystemTimestamps is no longer used for business logic, relying on event.payload.barTimestamp
       await this.persistState(robotId, RobotState.WAIT_RETRACEMENT);
+      
+      const timeframe = this.robotTimeframes.get(robotId) || '1m';
+      const durationMs = ((event as any).maxTimeoutCandles || 3) * this.getTimeframeDurationMs(timeframe);
+      
+      console.log(JSON.stringify({
+        event: 'TIMEOUT_STARTED',
+        robot_id: robotId,
+        timeframe: timeframe,
+        correlation_id: event.trace.correlationId,
+        signal_bar_timestamp: (event as any).barTimestamp,
+        signal_time_utc: new Date((event as any).barTimestamp || Date.now()).toISOString(),
+        timeout_duration_ms: durationMs
+      }));
     }
   }
 
@@ -161,35 +194,7 @@ export class StateMachineEngine implements IEngine {
         return;
       }
 
-      // 2. If not triggered, check Timeout
-      let count = (this.timeoutCounts.get(robotId) || 0) + 1;
-      this.timeoutCounts.set(robotId, count);
-
-      const maxTimeout = activeSignal.maxTimeoutCandles || 3;
-
-      if (count > maxTimeout) {
-        this.states.set(robotId, RobotState.WAIT_SIGNAL);
-        await this.persistState(robotId, RobotState.WAIT_SIGNAL);
-        
-        const trace = EventFactory.createTrace(
-          activeSignal.trace.correlationId,
-          event.eventId, 
-          this.engineId, 
-          event.trace.sequence
-        );
-        
-        const transitionEvent = EventFactory.createEvent(
-          'STATE_TRANSITION_EVENT', 
-          robotId, event.configVersion || 1, 
-          trace, 
-          { 
-            previousState: RobotState.WAIT_RETRACEMENT,
-            newState: RobotState.WAIT_SIGNAL,
-            reason: 'TIMEOUT'
-          }
-        );
-        await coreEventBus.publish(transitionEvent as any);
-      }
+      // 2. Timeout is now handled asynchronously by checkTimeouts()
     }
   }
 
@@ -287,6 +292,72 @@ export class StateMachineEngine implements IEngine {
     }
   }
 
+  private async checkTimeouts() {
+    const now = Date.now();
+    for (const [robotId, state] of this.states.entries()) {
+      if (state === RobotState.WAIT_RETRACEMENT) {
+        const activeSignal = this.activeSignals.get(robotId);
+        
+        if (activeSignal) {
+          const timeframe = this.robotTimeframes.get(robotId);
+          if (!timeframe) {
+              console.error(`[StateMachineEngine] CONFIG_ERROR for ${robotId}: Missing timeframe config`);
+              continue; // FAIL SAFE
+          }
+
+      const timeframeMs = this.getTimeframeDurationMs(timeframe);
+      const maxTimeout = (activeSignal as any).maxTimeoutCandles || 3;
+      const maxTimeoutMs = maxTimeout * timeframeMs;
+      
+      const signalBarTimestamp = (activeSignal as any).barTimestamp;
+          if (!signalBarTimestamp) {
+              console.error(`[StateMachineEngine] TIMEOUT_STATE_INVALID for ${robotId}: Missing signal barTimestamp`);
+              continue; // FAIL SAFE
+          }
+
+          const elapsedMs = now - signalBarTimestamp;
+
+          if (elapsedMs >= maxTimeoutMs) {
+            console.log(JSON.stringify({
+              event: 'RETRACEMENT_TIMEOUT',
+              robot_id: robotId,
+              timeframe: timeframe,
+              correlation_id: activeSignal.trace.correlationId,
+              signal_bar_timestamp: signalBarTimestamp,
+              timeout_at: new Date(now).toISOString(),
+              elapsed_ms: elapsedMs,
+              timeout_duration_ms: maxTimeoutMs,
+              reason: 'TIME_BASED_TIMEOUT'
+            }));
+            
+            this.states.set(robotId, RobotState.WAIT_SIGNAL);
+            await this.persistState(robotId, RobotState.WAIT_SIGNAL);
+            this.signalSystemTimestamps.delete(robotId);
+            
+            const trace = EventFactory.createTrace(
+              activeSignal.trace.correlationId,
+              'TIMEOUT_' + now, 
+              this.engineId, 
+              now
+            );
+            
+            const transitionEvent = EventFactory.createEvent(
+              'STATE_TRANSITION_EVENT', 
+              robotId, 1, 
+              trace, 
+              { 
+                previousState: RobotState.WAIT_RETRACEMENT,
+                newState: RobotState.WAIT_SIGNAL,
+                reason: 'TIMEOUT'
+              }
+            );
+            await coreEventBus.publish(transitionEvent as any);
+          }
+        }
+      }
+    }
+  }
+
   public getState(robotId: string): RobotState | undefined {
     return this.states.get(robotId);
   }
@@ -320,6 +391,7 @@ export class StateMachineEngine implements IEngine {
   public async shutdown(): Promise<void> {
     for (const unsub of this.unsubs) unsub();
     this.unsubs = [];
+    if (this.intervalId) clearInterval(this.intervalId);
     this.status = 'STOPPED';
   }
 }

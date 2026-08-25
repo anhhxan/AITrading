@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo, use } from 'react';
+import React, { useEffect, useState, useMemo, use, Fragment } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
@@ -153,7 +153,11 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
             }
         }
 
-        return { expectedCount, receivedCount, missingCount, completedPipeline, breaks, topBreak, gaps, sorted };
+        const gapEventsCount = gaps.length;
+        const largestGap = gaps.length > 0 ? Math.max(...gaps.map(g => g.missing)) : 0;
+        const lastGapObj = gaps.length > 0 ? gaps[gaps.length - 1] : null;
+
+        return { expectedCount, receivedCount, missingCount, completedPipeline, breaks, topBreak, gaps, sorted, gapEventsCount, largestGap, lastGapObj };
     }, [traces]);
 
     const isWorkerOnline = robotStatus?.last_heartbeat_at && (Date.now() - new Date(robotStatus.last_heartbeat_at).getTime() < 60000);
@@ -179,15 +183,19 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                 <Card className="bg-slate-50">
                     <CardHeader className="py-3 px-4"><CardTitle className="text-sm text-slate-500">Pipeline Coverage</CardTitle></CardHeader>
                     <CardContent className="px-4 pb-4">
-                        <div className="text-2xl font-bold">{stats ? ((stats.receivedCount / stats.expectedCount)*100).toFixed(1) : 0}%</div>
+                        <div className="text-2xl font-bold">{stats ? ((stats.receivedCount / stats.expectedCount)*100).toFixed(2) : 0}%</div>
                         <div className="text-xs text-slate-500 mt-1">Expected: {stats?.expectedCount || 0} | Received: {stats?.receivedCount || 0}</div>
+                        <div className="text-xs text-red-500 mt-0.5">Missing: {stats?.missingCount || 0}</div>
                     </CardContent>
                 </Card>
                 <Card className="bg-slate-50">
-                    <CardHeader className="py-3 px-4"><CardTitle className="text-sm text-slate-500">Missing Candles</CardTitle></CardHeader>
+                    <CardHeader className="py-3 px-4"><CardTitle className="text-sm text-slate-500">Gap Events</CardTitle></CardHeader>
                     <CardContent className="px-4 pb-4">
-                        <div className="text-2xl font-bold text-red-600">{stats?.missingCount || 0}</div>
-                        <div className="text-xs text-slate-500 mt-1">First Break Node: {stats?.topBreak?.[1] ? stats.topBreak[0] : 'N/A'}</div>
+                        <div className="text-2xl font-bold text-orange-600">{stats?.gapEventsCount || 0}</div>
+                        <div className="text-xs text-slate-500 mt-1">Largest Gap: {stats?.largestGap || 0} candles</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                            Last Gap: {stats?.lastGapObj ? `${new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }).format(new Date(stats.lastGapObj.from))} → ${new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }).format(new Date(stats.lastGapObj.to))}` : 'None'}
+                        </div>
                     </CardContent>
                 </Card>
                 <Card className="bg-slate-50">
@@ -273,14 +281,39 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                                         <TableCell colSpan={9} className="text-center py-8 text-slate-500">No traces found for this robot.</TableCell>
                                     </TableRow>
                                 ) : (
-                                    traces.map((trace) => {
+                                    traces.map((trace, index) => {
                                         const d = new Date(trace.bar_timestamp);
                                         const utcTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(d);
                                         const vnTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(d);
                                         
+                                        let gapWarning = null;
+                                        if (index < traces.length - 1) {
+                                            const olderTrace = traces[index + 1];
+                                            const diffMs = trace.bar_timestamp - olderTrace.bar_timestamp;
+                                            if (diffMs > 60000) {
+                                                const missingCount = Math.floor(diffMs / 60000) - 1;
+                                                const firstMissing = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(olderTrace.bar_timestamp + 60000));
+                                                const lastMissing = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(trace.bar_timestamp - 60000));
+                                                gapWarning = (
+                                                    <TableRow key={`gap-${trace.candle_trace_id}`} className="bg-orange-50/50 hover:bg-orange-50/50">
+                                                        <TableCell colSpan={9} className="text-center py-3">
+                                                            <div className="flex flex-col items-center justify-center text-orange-700 font-mono text-xs">
+                                                                <span className="font-bold flex items-center gap-1">
+                                                                    <span>⚠</span> GAP DETECTED
+                                                                </span>
+                                                                <span>MISSING {missingCount} CANDLES</span>
+                                                                <span className="text-orange-500">{firstMissing} → {lastMissing} (UTC)</span>
+                                                                <span className="text-[10px] mt-1 bg-orange-100 text-orange-600 px-2 py-0.5 rounded">STATUS: NOT OBSERVED</span>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            }
+                                        }
+
                                         return (
+                                            <Fragment key={trace.candle_trace_id}>
                                             <TableRow 
-                                                key={trace.candle_trace_id} 
                                                 className="hover:bg-slate-50 cursor-pointer font-mono text-xs transition-colors"
                                                 title={`Received at: ${new Date(trace.created_at).toISOString()}`}
                                             >
@@ -322,6 +355,8 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                                                     {trace.correlation_id || 'None'}
                                                 </TableCell>
                                             </TableRow>
+                                            {gapWarning}
+                                            </Fragment>
                                         );
                                     })
                                 )}

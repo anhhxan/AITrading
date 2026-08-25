@@ -31,22 +31,52 @@ export class RobotRuntime {
             return;
         }
 
-        const currentState = configData.robots.current_state || 'WAIT_SIGNAL';
+        // Event Sourcing Replay for True State
+        const { data: recentEvents } = await supabase
+            .from('core_events')
+            .select('event_type, payload, created_at')
+            .eq('robot_id', this.robotId)
+            .in('event_type', ['STRATEGY_SIGNAL_EVENT', 'STATE_TRANSITION_EVENT'])
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        let trueState = configData.robots.current_state || 'WAIT_SIGNAL';
+        let trueActiveSignal = null;
+
+        if (recentEvents && recentEvents.length > 0) {
+            // Replay events in chronological order (ascending)
+            const replayEvents = [...recentEvents].reverse();
+            for (const event of replayEvents) {
+                if (event.event_type === 'STRATEGY_SIGNAL_EVENT') {
+                    trueActiveSignal = event.payload;
+                    trueState = 'WAIT_RETRACEMENT';
+                } else if (event.event_type === 'STATE_TRANSITION_EVENT') {
+                    if (event.payload?.newState) {
+                        trueState = event.payload.newState;
+                        if (trueState !== 'WAIT_RETRACEMENT' && trueState !== 'READY_TO_ENTER') {
+                            trueActiveSignal = null;
+                        }
+                    }
+                }
+            }
+        }
         
         // Register strategy
         this.strategyEngine.registerRobot(this.robotId, 'BB_Strategy', {});
         
         // Register state
-        (this.stateMachine as any).states.set(this.robotId, currentState);
+        (this.stateMachine as any).states.set(this.robotId, trueState);
+        (this.stateMachine as any).registerRobot(this.robotId, configData.robots.timeframe);
 
-        const positionAllocationPercent = configData.position_allocation_percent || configData.robots?.position_allocation_percent || configData.risk_profile?.position_allocation_percent;
+        // FIX: STRICTLY USE risk_profile.position_allocation_percent, DO NOT READ LEGACY COLUMNS
+        const positionAllocationPercent = configData.risk_profile?.position_allocation_percent || 10;
         
         this.riskEngine.registerRobotConfig(this.robotId, {
             tradingViewSymbol: configData.robots.trading_view_symbol,
             executionSymbol: configData.robots.execution_symbol,
             timeframe: configData.robots.timeframe,
             accountBalance: configData.robots.paper_balance,
-            positionAllocationPercent: positionAllocationPercent || 10,
+            positionAllocationPercent: positionAllocationPercent,
             leverage: configData.robots.leverage || 1
         });
 
@@ -55,21 +85,9 @@ export class RobotRuntime {
             (this.positionTracker as any).positionContexts.set(this.robotId, pos.context_snapshot);
         }
 
-        if (currentState === 'WAIT_RETRACEMENT' || currentState === 'READY_TO_ENTER') {
-            const { data: signalEvent } = await supabase
-                .from('core_events')
-                .select('payload, timestamp')
-                .eq('robot_id', this.robotId)
-                .eq('event_type', 'STRATEGY_SIGNAL_EVENT')
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
-                
-            if (signalEvent && signalEvent.payload) {
-                const activeSignal = signalEvent.payload;
-                (this.stateMachine as any).activeSignals.set(this.robotId, activeSignal);
-                (this.riskEngine as any).activeSignals.set(this.robotId, activeSignal);
-            }
+        if ((trueState === 'WAIT_RETRACEMENT' || trueState === 'READY_TO_ENTER') && trueActiveSignal) {
+            (this.stateMachine as any).activeSignals.set(this.robotId, trueActiveSignal);
+            (this.riskEngine as any).activeSignals.set(this.robotId, trueActiveSignal);
         }
     }
     

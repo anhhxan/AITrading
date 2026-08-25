@@ -37,7 +37,7 @@ describe('StateMachineEngine - Retracement Limit Fill Phase 14D', () => {
     expectedFillPrice?: number
   ) => {
     const robotId = `test_robot_${name}`;
-    engine.registerRobot(robotId, 3);
+    engine.registerRobot('robot-1', '1m');
     
     const trace = EventFactory.createTrace('test-correlation', 'parent-id', 'test', 0);
     const signalEvent = EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, 1, trace, {

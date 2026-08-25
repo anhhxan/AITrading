@@ -12,7 +12,7 @@ describe('Phase 3: State Machine Transition', () => {
     coreIdempotencyStore.clear();
     engine = new StateMachineEngine();
     await engine.initialize();
-    engine.registerRobot('RobotSM', 2); // max 2 candles
+    engine.registerRobot('robot-1', '1m'); // max 2 candles
   });
 
   afterEach(async () => {

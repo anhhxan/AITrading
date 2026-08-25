@@ -18,7 +18,7 @@ async function runPhase3SmokeTest() {
   strategyEngine.registerRobot('smoke-bot-3', 'BB_Strategy', { retracementZonePercent: 20, timeoutCandles: 3 });
 
   const stateMachineEngine = new StateMachineEngine();
-  stateMachineEngine.registerRobot('smoke-bot-3', 3);
+  stateMachineEngine.registerRobot('robot-1', '1m');
 
   const orchestrator = new EngineOrchestrator();
   orchestrator.registerEngine('IndicatorEngine', indicatorEngine);

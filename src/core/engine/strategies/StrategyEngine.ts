@@ -64,6 +64,11 @@ export class StrategyEngine implements IEngine {
     const strategy = this.robotConfig.get(robotId);
     if (!strategy) return;
 
+    if ((event as any).candlePairValid === false) {
+       console.log(`[StrategyEngine] Skipped evaluation for ${robotId} due to INVALID candle pair (GAP).`);
+       return;
+    }
+
     // Fallback to first indicator if explicitly named one isn't found
     const indicatorSnapshot = event.indicators['BB_MB'] || Object.values(event.indicators)[0];
     const currentPrice = this.currentPrices.get(robotId) || 0;
@@ -164,6 +169,7 @@ export class StrategyEngine implements IEngine {
          robotId, event.configVersion || 1,
          trace,
          { 
+           barTimestamp: (event as any).barTimestamp,
            direction: signal.direction,
            maxTimeoutCandles: signal.maxTimeoutCandles || 3,
            entryTrigger: signal.entryTrigger,

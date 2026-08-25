@@ -215,35 +215,55 @@ export class TradingViewAdapter {
       currentTimestamp: payload.barTimestamp
     }));
 
+    let expected_delta_ms = 60000;
+    if (payload.timeframe === '5') expected_delta_ms = 5 * 60000;
+    if (payload.timeframe === '15') expected_delta_ms = 15 * 60000;
+    
+    let candle_pair_valid = true;
+
     if (prevTimestamp !== 'unknown' && typeof payload.barTimestamp === 'number') {
       const delta_ms = payload.barTimestamp - Number(prevTimestamp);
-      console.log(JSON.stringify({
-        event: 'TV_ADAPTER_CANDLE_PAIR_READY',
-        correlation_id: correlationId,
-        previousTimestamp: prevTimestamp,
-        currentTimestamp: payload.barTimestamp,
-        delta_ms
-      }));
       
-      let diagnostics: any = {};
-      
-      if (payload.timeframe === '1' && delta_ms !== 60000) {
-        diagnostics = { candle_gap: true, delta_ms };
-        console.log(JSON.stringify({
+      if (delta_ms !== expected_delta_ms) {
+        candle_pair_valid = false;
+        let missing_candle_count = 0;
+        if (delta_ms > expected_delta_ms) {
+          missing_candle_count = Math.floor((delta_ms / expected_delta_ms) - 1);
+        }
+        
+        const gapEvent = {
           event: 'CANDLE_GAP_DETECTED',
-          correlation_id: correlationId,
-          previousTimestamp: prevTimestamp,
-          currentTimestamp: payload.barTimestamp,
-          delta_ms
-        }));
-      }
-
-      upsertSignalTrace({
           robot_id: robotId,
-          bar_timestamp: payload.barTimestamp,
-          adapter_status: 'GREEN',
-          diagnostics: Object.keys(diagnostics).length > 0 ? diagnostics : undefined
-      });
+          timeframe: payload.timeframe,
+          previous_bar_timestamp: Number(prevTimestamp),
+          current_bar_timestamp: payload.barTimestamp,
+          delta_ms: delta_ms,
+          expected_delta_ms: expected_delta_ms,
+          missing_candle_count: missing_candle_count,
+          first_missing_bar_timestamp: Number(prevTimestamp) + expected_delta_ms,
+          last_missing_bar_timestamp: payload.barTimestamp - expected_delta_ms
+        };
+        console.log(JSON.stringify(gapEvent));
+        
+        upsertSignalTrace({
+            robot_id: robotId,
+            bar_timestamp: payload.barTimestamp,
+            adapter_status: 'RED',
+            diagnostics: gapEvent
+        });
+      } else {
+        console.log(JSON.stringify({
+          event: 'CANDLE_CONTINUOUS',
+          robot_id: robotId,
+          delta_ms: delta_ms
+        }));
+        
+        upsertSignalTrace({
+            robot_id: robotId,
+            bar_timestamp: payload.barTimestamp,
+            adapter_status: 'GREEN'
+        });
+      }
     } else if (typeof payload.barTimestamp === 'number') {
        upsertSignalTrace({
           robot_id: robotId,
@@ -260,6 +280,8 @@ export class TradingViewAdapter {
     
     const trace2 = EventFactory.createTrace(correlationId, candleEvent.eventId, 'TradingViewAdapter', seq++);
     const indicatorUpdatedEvent = EventFactory.createEvent('INDICATOR_UPDATED', robotId, activeVersion, trace2, {
+      barTimestamp: payload.barTimestamp,
+      candlePairValid: candle_pair_valid,
       previousClose: payload.previousPayload?.close || null,
       previousSnapshot: previousSnapshot,
       indicators: {

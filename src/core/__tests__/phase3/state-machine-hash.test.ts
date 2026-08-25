@@ -17,7 +17,7 @@ describe('Phase 3: State Machine Deterministic Hash', () => {
 
     engine = new StateMachineEngine();
     await engine.initialize();
-    engine.registerRobot('RobotHash', 2);
+    engine.registerRobot('robot-1', '1m');
 
     let eventOutput: any = null;
     const unsub = coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (evt: any) => {
@@ -65,7 +65,7 @@ describe('Phase 3: State Machine Deterministic Hash', () => {
 
       engine = new StateMachineEngine();
       await engine.initialize();
-      engine.registerRobot('RobotHash', 2);
+      engine.registerRobot('robot-1', '1m');
   
       let eventOutput: any = null;
       const unsub = coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (evt: any) => {
