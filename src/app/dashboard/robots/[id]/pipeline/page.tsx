@@ -39,6 +39,11 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [showAllGaps, setShowAllGaps] = useState(false);
     const [traceLimit, setTraceLimit] = useState(10);
+    
+    // Realtime Price Feed States
+    const [feedHeartbeat, setFeedHeartbeat] = useState<any>(null);
+    const [forensicEvents, setForensicEvents] = useState<any[]>([]);
+    const [waitRetracementSignal, setWaitRetracementSignal] = useState<any>(null);
 
     useEffect(() => {
         if (!robotId || robotId === '') {
@@ -81,7 +86,7 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
 
                 const { data: robot, error: robotError } = await supabase
                     .from('robots')
-                    .select('status, last_heartbeat_at')
+                    .select('status, last_heartbeat_at, current_state')
                     .eq('id', robotId)
                     .single();
                 
@@ -90,6 +95,47 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                 } else if (robot) {
                     setRobotStatus(robot);
                     console.log(`[PIPELINE_MONITOR] heartbeat robotId = ${robotId} (${robot.last_heartbeat_at})`);
+                }
+
+                // Fetch Realtime Price Feed Heartbeat
+                const { data: heartbeats } = await supabase
+                    .from('core_events')
+                    .select('*')
+                    .eq('robot_id', robotId)
+                    .eq('event_type', 'PRICE_HEARTBEAT_EVENT')
+                    .order('timestamp', { ascending: false })
+                    .limit(1);
+
+                if (heartbeats && heartbeats.length > 0) {
+                    setFeedHeartbeat(heartbeats[0].payload);
+                } else {
+                    setFeedHeartbeat(null);
+                }
+
+                // Fetch Forensic Events
+                const { data: forensics } = await supabase
+                    .from('core_events')
+                    .select('*')
+                    .eq('robot_id', robotId)
+                    .in('event_type', ['REALTIME_PRICE_FEED_CONNECTED', 'REALTIME_PRICE_FEED_STALE', 'REALTIME_PRICE_FEED_DISCONNECTED', 'RETRACEMENT_ZONE_TOUCHED', 'RETRACEMENT_ENTRY_TRIGGERED'])
+                    .order('timestamp', { ascending: false })
+                    .limit(5);
+                if (forensics) setForensicEvents(forensics);
+
+                // Fetch Wait Retracement signal info if needed
+                if (robot?.current_state === 'WAIT_RETRACEMENT') {
+                    const { data: signals } = await supabase
+                        .from('core_events')
+                        .select('payload')
+                        .eq('robot_id', robotId)
+                        .eq('event_type', 'STRATEGY_SIGNAL_EVENT')
+                        .order('timestamp', { ascending: false })
+                        .limit(1);
+                    if (signals && signals.length > 0) {
+                        setWaitRetracementSignal(signals[0].payload);
+                    }
+                } else {
+                    setWaitRetracementSignal(null);
                 }
 
             } catch (err: any) {
@@ -108,7 +154,16 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
             })
             .subscribe();
 
-        return () => { sub.unsubscribe(); }
+        const subCore = supabase.channel('core_events_ch')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'core_events', filter: `robot_id=eq.${robotId}` }, () => {
+                fetchData();
+            })
+            .subscribe();
+
+        return () => { 
+            sub.unsubscribe(); 
+            subCore.unsubscribe();
+        }
     }, [robotId, supabase]);
 
     const stats = useMemo(() => {
@@ -178,6 +233,131 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                 <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
                     <strong>Error:</strong> {errorMsg}
                 </div>
+            )}
+
+            {/* REALTIME PRICE & RETRACEMENT MONITOR */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="border-indigo-200">
+                    <CardHeader className="bg-indigo-50/50 py-3">
+                        <CardTitle className="text-sm font-semibold text-indigo-800">REALTIME PRICE FEED</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 space-y-3">
+                        {feedHeartbeat ? (
+                            <>
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                    <span className="text-slate-500">Symbol</span>
+                                    <span className="font-mono font-medium">{feedHeartbeat.symbol}</span>
+                                    
+                                    <span className="text-slate-500">Last Price</span>
+                                    <span className="font-mono font-bold text-lg">{feedHeartbeat.price?.toFixed(2)}</span>
+                                    
+                                    <span className="text-slate-500">Market Time</span>
+                                    <span className="font-mono text-xs">
+                                        {new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(new Date(feedHeartbeat.eventTimestamp))} UTC
+                                    </span>
+                                    
+                                    <span className="text-slate-500">VN Time</span>
+                                    <span className="font-mono text-xs">
+                                        {new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(new Date(feedHeartbeat.eventTimestamp))}
+                                    </span>
+                                    
+                                    <span className="text-slate-500">Latency</span>
+                                    <span className="font-mono">{Math.max(0, Date.now() - feedHeartbeat.eventTimestamp)} ms</span>
+                                </div>
+                                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
+                                    <div className={`h-3 w-3 rounded-full ${feedHeartbeat.status === 'CONNECTED' ? 'bg-green-500' : feedHeartbeat.status === 'STALE' ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                                    <span className={`font-bold ${feedHeartbeat.status === 'CONNECTED' ? 'text-green-700' : feedHeartbeat.status === 'STALE' ? 'text-yellow-700' : 'text-red-700'}`}>
+                                        {feedHeartbeat.status}
+                                    </span>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-6 text-slate-400">
+                                <div className="h-3 w-3 rounded-full bg-red-500 mb-2" />
+                                <span className="font-bold text-red-700">DISCONNECTED</span>
+                                <span className="text-xs mt-1">No heartbeat received</span>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {robotStatus?.current_state === 'WAIT_RETRACEMENT' && waitRetracementSignal && (
+                    <Card className="border-amber-200">
+                        <CardHeader className="bg-amber-50/50 py-3">
+                            <CardTitle className="text-sm font-semibold text-amber-800">RETRACEMENT MONITOR</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-3">
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                <span className="text-slate-500">Direction</span>
+                                <span className={`font-bold ${waitRetracementSignal.direction === 'LONG' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {waitRetracementSignal.direction}
+                                </span>
+                                
+                                <span className="text-slate-500">Zone</span>
+                                <span className="font-mono text-amber-700 font-medium">
+                                    {waitRetracementSignal.entryTrigger?.lower?.toFixed(2)} → {waitRetracementSignal.entryTrigger?.upper?.toFixed(2)}
+                                </span>
+                                
+                                <span className="text-slate-500">Current</span>
+                                <span className="font-mono font-bold">{feedHeartbeat?.price?.toFixed(2) || 'N/A'}</span>
+                                
+                                <span className="text-slate-500">Status</span>
+                                {(() => {
+                                    const entryEvent = forensicEvents.find(e => e.event_type === 'RETRACEMENT_ENTRY_TRIGGERED');
+                                    const touchedEvent = forensicEvents.find(e => e.event_type === 'RETRACEMENT_ZONE_TOUCHED');
+                                    
+                                    if (entryEvent) {
+                                        return (
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-emerald-600">🟢 ENTRY TRIGGERED</span>
+                                                <span className="text-xs text-slate-500 font-mono mt-1">Price: {entryEvent.payload.entry_price}</span>
+                                            </div>
+                                        );
+                                    }
+                                    if (touchedEvent) {
+                                        return <span className="font-bold text-emerald-600">🟢 ZONE TOUCHED</span>;
+                                    }
+                                    return <span className="font-bold text-amber-600">WAITING FOR RETRACEMENT</span>;
+                                })()}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
+
+            {/* FORENSIC EVENTS */}
+            {forensicEvents.length > 0 && (
+                <Card className="border-slate-200">
+                    <CardHeader className="bg-slate-50/50 py-3">
+                        <CardTitle className="text-sm font-semibold text-slate-800">Forensic Entry Events</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>UTC Time</TableHead>
+                                    <TableHead>Event Type</TableHead>
+                                    <TableHead>Price</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {forensicEvents.map((evt, i) => (
+                                    <TableRow key={i}>
+                                        <TableCell className="font-mono text-xs">
+                                            {new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(new Date(evt.timestamp))}
+                                        </TableCell>
+                                        <TableCell className="font-mono text-xs font-semibold text-indigo-700">
+                                            {evt.event_type}
+                                        </TableCell>
+                                        <TableCell className="font-mono text-xs">
+                                            {evt.payload.price || evt.payload.entry_price || 'N/A'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
             )}
 
             {/* D. SUMMARY PANEL */}
