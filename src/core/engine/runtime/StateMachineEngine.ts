@@ -153,36 +153,36 @@ export class StateMachineEngine implements IEngine {
       }
       
       if (isTriggered) {
-        console.log(JSON.stringify({
-            event: 'RETRACEMENT_ZONE_TOUCHED',
-            robot_id: robotId,
-            direction: activeSignal.direction,
-            price: currentPrice,
-            zone_lower: trigger?.lower,
-            zone_upper: trigger?.upper,
-            timestamp: Date.now()
-        }));
-        
-        // Atomic transition
-        this.states.set(robotId, RobotState.READY_TO_ENTER);
-        await this.persistState(robotId, RobotState.READY_TO_ENTER);
-        
-        console.log(JSON.stringify({
-            event: 'RETRACEMENT_ENTRY_TRIGGERED',
-            robot_id: robotId,
-            direction: activeSignal.direction,
-            entry_price: currentPrice,
-            signal_bar_timestamp: (activeSignal as any).barTimestamp,
-            market_timestamp: event.eventTimestamp,
-            entry_timestamp: Date.now()
-        }));
-        
         const trace = EventFactory.createTrace(
           activeSignal.trace.correlationId,
           event.eventId,
           this.engineId, 
           event.trace.sequence
         );
+        
+        const zoneTouchedPayload = {
+            direction: activeSignal.direction,
+            price: currentPrice,
+            zone_lower: trigger?.lower,
+            zone_upper: trigger?.upper,
+            timestamp: Date.now()
+        };
+        console.log(JSON.stringify({ event: 'RETRACEMENT_ZONE_TOUCHED', robot_id: robotId, ...zoneTouchedPayload }));
+        await coreEventBus.publish(EventFactory.createEvent('RETRACEMENT_ZONE_TOUCHED', robotId, 1, trace, zoneTouchedPayload) as any);
+        
+        // Atomic transition
+        this.states.set(robotId, RobotState.READY_TO_ENTER);
+        await this.persistState(robotId, RobotState.READY_TO_ENTER);
+        
+        const entryTriggeredPayload = {
+            direction: activeSignal.direction,
+            entry_price: currentPrice,
+            signal_bar_timestamp: (activeSignal as any).barTimestamp,
+            market_timestamp: event.eventTimestamp,
+            entry_timestamp: Date.now()
+        };
+        console.log(JSON.stringify({ event: 'RETRACEMENT_ENTRY_TRIGGERED', robot_id: robotId, ...entryTriggeredPayload }));
+        await coreEventBus.publish(EventFactory.createEvent('RETRACEMENT_ENTRY_TRIGGERED', robotId, 1, trace, entryTriggeredPayload) as any);
 
         const transitionEvent = EventFactory.createEvent(
           'STATE_TRANSITION_EVENT', 

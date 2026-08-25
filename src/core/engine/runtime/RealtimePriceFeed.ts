@@ -176,13 +176,34 @@ export class RealtimePriceFeed {
         this.status = 'DISCONNECTED';
     }
 
-    private logForensic(event: string) {
+    private async logForensic(event: string) {
         console.log(JSON.stringify({
             event,
             robot_id: this.robotId,
             symbol: this.symbol,
             timestamp: Date.now()
         }));
+        
+        const trace = EventFactory.createTrace(
+            `ws-sys-${Date.now()}`,
+            'sys',
+            this.engineId,
+            0
+        );
+
+        const sysEvent = EventFactory.createEvent(
+            event, // eventType = REALTIME_PRICE_FEED_CONNECTED etc
+            this.robotId,
+            1,
+            trace,
+            {
+                symbol: this.symbol,
+                status: this.status,
+                timestamp: Date.now()
+            }
+        );
+        
+        await coreEventBus.publish(sysEvent as any);
     }
 }
 
