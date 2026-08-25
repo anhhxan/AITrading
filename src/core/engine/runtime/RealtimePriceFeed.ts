@@ -42,9 +42,11 @@ export class RealtimePriceFeed {
         
         // Stale check
         this.staleCheckInterval = setInterval(() => {
-            if (this.status === 'CONNECTED' && Date.now() - this.lastMarketTimestamp > 5000 && this.lastMarketTimestamp > 0) {
-                this.status = 'STALE';
-                this.logForensic('REALTIME_PRICE_FEED_STALE');
+            if (this.status === 'CONNECTED') {
+                if (this.lastMarketTimestamp <= 0 || Date.now() - this.lastMarketTimestamp > 5000) {
+                    this.status = 'STALE';
+                    this.logForensic('REALTIME_PRICE_FEED_STALE');
+                }
             }
         }, 1000);
         
@@ -73,7 +75,7 @@ export class RealtimePriceFeed {
                 symbol: this.symbol,
                 price: this.lastPrice,
                 eventTimestamp: this.lastMarketTimestamp,
-                source: 'BINANCE_FUTURES_AGGTRADE',
+                source: 'BINANCE_FUTURES_TRADE',
                 status: this.status
             }
         );
@@ -89,7 +91,7 @@ export class RealtimePriceFeed {
 
         const streamSymbol = this.symbol.replace('BINANCE:', '').toLowerCase();
         
-        const wsUrl = `wss://fstream.binance.com/ws/${streamSymbol}@aggTrade`;
+        const wsUrl = `wss://fstream.binance.com/ws/${streamSymbol}@trade`;
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
@@ -107,20 +109,26 @@ export class RealtimePriceFeed {
         this.ws.onmessage = (event: MessageEvent) => {
             try {
                 const data = JSON.parse(event.data.toString());
-                if (data.e === 'aggTrade') {
-                    this.lastPrice = parseFloat(data.p);
-                    this.lastMarketTimestamp = data.E; // Event time
-                    this.sequenceId++;
+                if (data.e === 'trade') {
+                    const price = parseFloat(data.p);
+                    const timestamp = data.E;
                     
-                    if (this.status === 'STALE') {
-                        this.status = 'CONNECTED';
-                        this.logForensic('REALTIME_PRICE_FEED_RECONNECTED');
+                    if (price > 0 && timestamp > 0) {
+                        this.lastPrice = price;
+                        this.lastMarketTimestamp = timestamp; // Event time
+                        this.sequenceId++;
+                        
+                        if (this.status === 'STALE' || this.status === 'DISCONNECTED') {
+                            this.status = 'CONNECTED';
+                            this.logForensic('REALTIME_PRICE_FEED_RECONNECTED');
+                        }
+                        
+                        this.publishEvent();
                     }
-                    
-                    this.publishEvent();
                 }
             } catch (err) {
                 console.error(`[RealtimePriceFeed] JSON parse error:`, err);
+                this.logForensic('REALTIME_PRICE_PARSE_ERROR');
             }
         };
 
@@ -156,7 +164,7 @@ export class RealtimePriceFeed {
                 symbol: this.symbol,
                 price: this.lastPrice,
                 eventTimestamp: this.lastMarketTimestamp,
-                source: 'BINANCE_FUTURES_AGGTRADE',
+                source: 'BINANCE_FUTURES_TRADE',
                 sequenceId: this.sequenceId
             }
         );

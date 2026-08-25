@@ -132,6 +132,9 @@ export class StateMachineEngine implements IEngine {
   }
 
   private async handleRealtimePrice(event: any) {
+    if (event.price <= 0 || event.eventTimestamp <= 0) {
+      return; // ENTRY SAFETY: Ignore invalid realtime price ticks
+    }
     const robotId = event.robotId;
     const currentState = this.states.get(robotId);
     
