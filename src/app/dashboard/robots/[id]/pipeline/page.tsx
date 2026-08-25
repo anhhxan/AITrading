@@ -37,6 +37,7 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
     const [loading, setLoading] = useState(true);
     const [robotStatus, setRobotStatus] = useState<any>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [showAllGaps, setShowAllGaps] = useState(false);
 
     useEffect(() => {
         if (!robotId || robotId === '') {
@@ -219,10 +220,24 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
             </div>
 
             {/* C. GAP ANALYSIS */}
-            {stats && stats.gaps.length > 0 && (
+            {stats && stats.gaps.length > 0 && (() => {
+                const visibleGaps = showAllGaps ? stats.gaps : stats.gaps.slice(0, 20);
+                const hasMore = stats.gaps.length > 20;
+
+                return (
                 <Card className="border-red-200">
-                    <CardHeader className="bg-red-50/50 py-3">
+                    <CardHeader className="bg-red-50/50 py-3 flex flex-row items-center justify-between">
                         <CardTitle className="text-sm font-semibold text-red-800">Gap Analysis (Missing Candles)</CardTitle>
+                        {!showAllGaps && hasMore && (
+                            <Badge variant="outline" className="text-xs bg-white text-red-700 hover:bg-red-50 cursor-pointer" onClick={() => setShowAllGaps(true)}>
+                                Xem thêm {stats.gaps.length - 20} gaps
+                            </Badge>
+                        )}
+                        {showAllGaps && hasMore && (
+                            <Badge variant="outline" className="text-xs bg-white text-red-700 hover:bg-red-50 cursor-pointer" onClick={() => setShowAllGaps(false)}>
+                                Thu gọn
+                            </Badge>
+                        )}
                     </CardHeader>
                     <CardContent className="p-0">
                         <Table>
@@ -235,7 +250,7 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {stats.gaps.map((gap, i) => (
+                                {visibleGaps.map((gap, i) => (
                                     <TableRow key={i}>
                                         <TableCell className="font-mono text-xs">{new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(gap.from))}</TableCell>
                                         <TableCell className="font-mono text-xs">{new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(gap.to))}</TableCell>
@@ -247,7 +262,8 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                         </Table>
                     </CardContent>
                 </Card>
-            )}
+                );
+            })()}
 
             {/* A & B. PIPELINE TRACE (Realtime & History) */}
             <Card className="bg-white border-slate-200 shadow-sm">
