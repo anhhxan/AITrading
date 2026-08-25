@@ -64,7 +64,9 @@ export class RobotStateMachine {
     const context: StrategyContext = {
       robotId: this.id,
       indicatorSnapshot,
-      currentPrice: candleData.close
+      currentPrice: candleData.close,
+      currentHigh: candleData.high,
+      currentLow: candleData.low
     };
 
     const signal = this.strategyPlugin.evaluate(context);

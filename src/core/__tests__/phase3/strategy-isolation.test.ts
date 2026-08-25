@@ -13,7 +13,7 @@ class CrashStrategy implements IStrategy {
 describe('Phase 3: Plugin Isolation (Strategy)', () => {
   it('I2: Strategy Crash không sập hệ thống', () => {
     const strat = new CrashStrategy();
-    const result = PluginLoader.safeEvaluateStrategy(strat, { robotId: 'R1', indicatorSnapshot: {}, currentPrice: 100 });
+    const result = PluginLoader.safeEvaluateStrategy(strat, { robotId: 'R1', indicatorSnapshot: {}, currentPrice: 100, currentHigh: 110, currentLow: 90 });
     
     expect(result).toBe('ERROR');
   });

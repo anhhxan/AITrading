@@ -82,6 +82,8 @@ export interface StrategyContext {
   indicatorSnapshot: Record<string, any>;
   previousSnapshot?: Record<string, any> | null;
   currentPrice: number;
+  currentHigh: number;
+  currentLow: number;
   previousClose?: number | null; // FIX 3: Add previousClose field
   // Other contextual data can be passed here
 }

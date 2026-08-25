@@ -35,6 +35,8 @@ export class StrategyEngine implements IEngine {
   
   private robotConfig: Map<string, IStrategy> = new Map();
   private currentPrices: Map<string, number> = new Map();
+  private currentHighs: Map<string, number> = new Map();
+  private currentLows: Map<string, number> = new Map();
   private currentTimestamps: Map<string, number> = new Map();
   private unsubs: (() => void)[] = [];
 
@@ -43,6 +45,8 @@ export class StrategyEngine implements IEngine {
     
     this.unsubs.push(coreEventBus.subscribe('CANDLE_CLOSED', async (event: any) => {
        this.currentPrices.set(event.robotId, event.candle.close);
+       this.currentHighs.set(event.robotId, event.candle.high);
+       this.currentLows.set(event.robotId, event.candle.low);
        this.currentTimestamps.set(event.robotId, event.candle.timestamp);
     }));
 
@@ -72,6 +76,8 @@ export class StrategyEngine implements IEngine {
     // Fallback to first indicator if explicitly named one isn't found
     const indicatorSnapshot = event.indicators['BB_MB'] || Object.values(event.indicators)[0];
     const currentPrice = this.currentPrices.get(robotId) || 0;
+    const currentHigh = this.currentHighs.get(robotId) || 0;
+    const currentLow = this.currentLows.get(robotId) || 0;
     const barTimestamp = this.currentTimestamps.get(robotId) || 'unknown';
     const previousClose = (event as any).previousClose;
     const previousSnapshot = (event as any).previousSnapshot || null;
@@ -81,6 +87,8 @@ export class StrategyEngine implements IEngine {
       indicatorSnapshot,
       previousSnapshot,
       currentPrice,
+      currentHigh,
+      currentLow,
       previousClose // FIX 3: Pass down persistent previous close
     });
 
