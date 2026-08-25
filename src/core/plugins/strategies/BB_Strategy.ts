@@ -60,12 +60,13 @@ export class BB_Strategy implements IStrategy {
         upper: currB5 + zoneValue
       };
     } else if (signal === 'SHORT') {
-      const distance = currB1 - currB2;
+      const currB3 = indicatorSnapshot.line3;
+      const distance = currB2 - currB3;
       const zoneValue = distance * (this.retracementZonePercent / 100);
       entryTrigger = {
         type: 'RETRACEMENT_ZONE',
-        lower: currB1 - zoneValue,
-        upper: currB1
+        lower: currB2 - zoneValue,
+        upper: currB2
       };
     }
 

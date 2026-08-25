@@ -7,8 +7,11 @@ import { PaperPositionTracker } from '@/core/engine/execution/PaperPositionTrack
 import { TradingViewAdapter } from '@/core/adapters/tradingview/TradingViewAdapter';
 import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { EngineOrchestrator } from '@/core/engine/runtime/EngineOrchestrator';
+import { RealtimePriceFeed } from '@/core/engine/runtime/RealtimePriceFeed';
 
 export class RobotRuntime {
+    public priceFeed: RealtimePriceFeed | null = null;
+    
     constructor(
         public readonly robotId: string,
         private strategyEngine: StrategyEngine,
@@ -89,9 +92,16 @@ export class RobotRuntime {
             (this.stateMachine as any).activeSignals.set(this.robotId, trueActiveSignal);
             (this.riskEngine as any).activeSignals.set(this.robotId, trueActiveSignal);
         }
+        
+        // Start Realtime Price Feed
+        if (configData.robots.execution_symbol) {
+            this.priceFeed = new RealtimePriceFeed(this.robotId, configData.robots.execution_symbol);
+            this.priceFeed.start();
+        }
     }
     
     public destroy() {
+        if (this.priceFeed) this.priceFeed.stop();
         (this.strategyEngine as any).robotConfig.delete(this.robotId);
         (this.stateMachine as any).states.delete(this.robotId);
         (this.riskEngine as any).robotConfigs.delete(this.robotId);

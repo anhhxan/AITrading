@@ -147,6 +147,8 @@ export class EventBus {
       }
 
       // Persistence Layer - Awaited for Vercel Serverless safety but isolated from Core failures
+      if (event.eventType === 'REALTIME_PRICE_EVENT') return; // Do not save tick data to DB to save cost
+
       try {
         const supabase = getSupabaseAdmin();
         const { error } = await supabase.from('core_events').insert({

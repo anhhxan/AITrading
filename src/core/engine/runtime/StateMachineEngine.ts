@@ -57,8 +57,8 @@ export class StateMachineEngine implements IEngine {
        await this.handleSignalDetected(e);
     }));
 
-    this.unsubs.push(coreEventBus.subscribe('CANDLE_CLOSED', async (e: any) => {
-       await this.handleCandleClosed(e);
+    this.unsubs.push(coreEventBus.subscribe('REALTIME_PRICE_EVENT', async (e: any) => {
+       await this.handleRealtimePrice(e);
     }));
 
     this.unsubs.push(coreEventBus.subscribe('POSITION_OPENED_EVENT', async (e: PositionOpenedEvent) => {
@@ -131,52 +131,57 @@ export class StateMachineEngine implements IEngine {
     }
   }
 
-  private async handleCandleClosed(event: any) {
+  private async handleRealtimePrice(event: any) {
     const robotId = event.robotId;
     const currentState = this.states.get(robotId);
-    console.log(`[StateMachineEngine] handleCandleClosed - robotId: ${robotId}, currentState: ${currentState}`);
     
     if (currentState === RobotState.WAIT_RETRACEMENT) {
       const activeSignal = this.activeSignals.get(robotId);
-      console.log(`[StateMachineEngine] activeSignal:`, activeSignal ? 'EXISTS' : 'NULL');
       if (!activeSignal) return;
 
-      const currentPrice = event.candle.close;
+      const currentPrice = event.price;
       const trigger = activeSignal.entryTrigger;
       
-      console.log(`[StateMachineEngine] Evaluating Trigger: currentPrice=${currentPrice}, trigger=${JSON.stringify(trigger)}`);
-
-      // 1. Check Trigger FIRST (Retracement Zone evaluation via OHLC)
       let isTriggered = false;
-      let calculatedFillPrice = event.candle.close; // Fallback
       
       if (trigger) {
-        const { open, low, high } = event.candle;
-        
         if (activeSignal.direction === 'LONG') {
-          isTriggered = open >= trigger.lower && low <= trigger.upper;
-          if (isTriggered) {
-            calculatedFillPrice = Math.min(open, trigger.upper);
-          }
+          isTriggered = currentPrice >= trigger.lower! && currentPrice <= trigger.upper!;
         } else if (activeSignal.direction === 'SHORT') {
-          isTriggered = open <= trigger.upper && high >= trigger.lower;
-          if (isTriggered) {
-            calculatedFillPrice = Math.max(open, trigger.lower);
-          }
+          isTriggered = currentPrice >= trigger.lower! && currentPrice <= trigger.upper!;
         }
       }
       
-      console.log(`[StateMachineEngine] isTriggered: ${isTriggered}, calculatedFillPrice: ${calculatedFillPrice}`);
-
       if (isTriggered) {
+        console.log(JSON.stringify({
+            event: 'RETRACEMENT_ZONE_TOUCHED',
+            robot_id: robotId,
+            direction: activeSignal.direction,
+            price: currentPrice,
+            zone_lower: trigger?.lower,
+            zone_upper: trigger?.upper,
+            timestamp: Date.now()
+        }));
+        
+        // Atomic transition
         this.states.set(robotId, RobotState.READY_TO_ENTER);
         await this.persistState(robotId, RobotState.READY_TO_ENTER);
         
+        console.log(JSON.stringify({
+            event: 'RETRACEMENT_ENTRY_TRIGGERED',
+            robot_id: robotId,
+            direction: activeSignal.direction,
+            entry_price: currentPrice,
+            signal_bar_timestamp: (activeSignal as any).barTimestamp,
+            market_timestamp: event.eventTimestamp,
+            entry_timestamp: Date.now()
+        }));
+        
         const trace = EventFactory.createTrace(
-          activeSignal.trace.correlationId, // Preserve original correlationId
-          event.eventId,                    // Parent is the triggering candle
+          activeSignal.trace.correlationId,
+          event.eventId,
           this.engineId, 
-          event.trace.sequence              // Sequence of the triggering candle
+          event.trace.sequence
         );
 
         const transitionEvent = EventFactory.createEvent(
@@ -187,14 +192,12 @@ export class StateMachineEngine implements IEngine {
             previousState: RobotState.WAIT_RETRACEMENT,
             newState: RobotState.READY_TO_ENTER,
             reason: 'TRIGGER_MATCHED',
-            triggerPrice: calculatedFillPrice
+            triggerPrice: currentPrice
           }
         );
         await coreEventBus.publish(transitionEvent as any);
         return;
       }
-
-      // 2. Timeout is now handled asynchronously by checkTimeouts()
     }
   }
 
