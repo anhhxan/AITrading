@@ -38,6 +38,7 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
     const [robotStatus, setRobotStatus] = useState<any>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [showAllGaps, setShowAllGaps] = useState(false);
+    const [traceLimit, setTraceLimit] = useState(10);
 
     useEffect(() => {
         if (!robotId || robotId === '') {
@@ -269,7 +270,7 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
             <Card className="bg-white border-slate-200 shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between py-4 border-b border-slate-100">
                     <CardTitle className="text-lg text-slate-800">Realtime Pipeline Trace</CardTitle>
-                    <div className="text-xs text-slate-500 font-medium">Displaying recent {traces.length} observations</div>
+                    <div className="text-xs text-slate-500 font-medium">Displaying {Math.min(traces.length, traceLimit)} of {traces.length} observations</div>
                 </CardHeader>
                 <CardContent className="p-0">
                     <div className="overflow-x-auto max-h-[600px]">
@@ -297,7 +298,7 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                                         <TableCell colSpan={9} className="text-center py-8 text-slate-500">No traces found for this robot.</TableCell>
                                     </TableRow>
                                 ) : (
-                                    traces.map((trace, index) => {
+                                    traces.slice(0, traceLimit).map((trace, index) => {
                                         const d = new Date(trace.bar_timestamp);
                                         const utcTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(d);
                                         const vnTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(d);
@@ -378,6 +379,16 @@ export default function SignalPipelineMonitor({ params }: { params: Promise<{ id
                                 )}
                             </TableBody>
                         </Table>
+                        {traces.length > traceLimit && (
+                            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-center sticky left-0 rounded-b-lg">
+                                <button 
+                                    onClick={() => setTraceLimit(prev => prev + 10)}
+                                    className="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-50 transition-colors shadow-sm"
+                                >
+                                    Xem thêm 10 dòng
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </CardContent>
             </Card>
