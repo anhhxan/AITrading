@@ -80,8 +80,7 @@ export class PaperExecutionEngine implements IEngine {
             quantity: existingPos.quantity,
             price: event.entryReferencePrice,
             leverage: existingPos.leverage,
-            status: 'FILLED',
-            correlation_id: existingPos.correlation_id // Keep original ID
+            status: 'FILLED'
           }).select('id').single();
 
           if (closeIntentData) {
@@ -99,8 +98,7 @@ export class PaperExecutionEngine implements IEngine {
                 filled_quantity: existingPos.quantity,
                 average_fill_price: event.entryReferencePrice,
                 status: 'FILLED',
-                role: 'EXIT',
-                correlation_id: existingPos.correlation_id // Keep original ID
+                role: 'TAKER'
               });
           }
 
@@ -157,8 +155,7 @@ export class PaperExecutionEngine implements IEngine {
           quantity: event.positionSize,
           price: event.entryReferencePrice,
           leverage: event.leverage,
-          status: 'FILLED',
-          correlation_id: event.trace.correlationId
+          status: 'FILLED'
         })
         .select('id')
         .single();
@@ -187,8 +184,7 @@ export class PaperExecutionEngine implements IEngine {
           filled_quantity: event.positionSize,
           average_fill_price: event.entryReferencePrice,
           status: 'FILLED',
-          role: 'ENTRY',
-          correlation_id: event.trace.correlationId
+          role: 'TAKER'
         })
         .select('id')
         .single();
@@ -213,7 +209,6 @@ export class PaperExecutionEngine implements IEngine {
           realized_pnl: 0,
           stop_loss_price: event.stopLoss,
           take_profit_price: event.takeProfit,
-          correlation_id: event.trace.correlationId,
           context_snapshot: {
             executionSymbol: event.executionSymbol,
             tradingViewSymbol: event.tradingViewSymbol,
