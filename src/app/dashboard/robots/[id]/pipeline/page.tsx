@@ -1,577 +1,299 @@
-'use client';
-import React, { useEffect, useState, useMemo, use, Fragment } from 'react';
+'use client'
+
+import { useState, useEffect, use } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-
-const StatusDot = ({ status }: { status?: string }) => {
-    if (status === 'GREEN') return <div className="h-3 w-3 rounded-full bg-green-500 mx-auto" title="GREEN (Processed)" />;
-    if (status === 'RED') return <div className="h-3 w-3 rounded-full bg-red-500 mx-auto" title="RED (Error)" />;
-    return <div className="h-3 w-3 rounded-full bg-slate-200 mx-auto border border-slate-300" title="UNKNOWN / NOT OBSERVED" />;
-};
-
-function getFirstBreak(trace: any) {
-    let maxGreen = -1;
-    if (trace.tv_status === 'GREEN') maxGreen = Math.max(maxGreen, 0);
-    if (trace.cf_status === 'GREEN') maxGreen = Math.max(maxGreen, 1);
-    if (trace.vercel_status === 'GREEN') maxGreen = Math.max(maxGreen, 2);
-    if (trace.db_status === 'GREEN') maxGreen = Math.max(maxGreen, 3);
-    if (trace.poller_status === 'GREEN') maxGreen = Math.max(maxGreen, 4);
-    if (trace.adapter_status === 'GREEN') maxGreen = Math.max(maxGreen, 5);
-    if (trace.strategy_status === 'GREEN') maxGreen = Math.max(maxGreen, 6);
-
-    if (maxGreen === 6) return null; // Complete
-    if (maxGreen === -1) return 'NOT_OBSERVED';
-    
-    const nodes = ['TV', 'Cloudflare', 'Vercel', 'Database', 'Poller', 'Adapter', 'Strategy'];
-    return nodes[maxGreen + 1];
-}
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Activity } from 'lucide-react';
 
 export default function SignalPipelineMonitor({ params }: { params: Promise<{ id: string }> }) {
     const resolvedParams = use(params);
     const robotId = resolvedParams.id;
     const supabase = createClient();
-    
-    const [traces, setTraces] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [robotStatus, setRobotStatus] = useState<any>(null);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
-    const [showAllGaps, setShowAllGaps] = useState(false);
-    const [traceLimit, setTraceLimit] = useState(10);
     
     // Realtime Price Feed States
     const [feedHeartbeat, setFeedHeartbeat] = useState<any>(null);
-    const [forensicEvents, setForensicEvents] = useState<any[]>([]);
     const [waitRetracementSignal, setWaitRetracementSignal] = useState<any>(null);
 
-    useEffect(() => {
-        if (!robotId || robotId === '') {
-            setErrorMsg("Robot ID unavailable");
-            console.error("[PIPELINE_MONITOR] Robot ID unavailable");
-            setLoading(false);
-            return;
-        }
+    // Golden Trace States
+    const [goldenTraces, setGoldenTraces] = useState<any[]>([]);
 
-        console.log(`[PIPELINE_MONITOR] robotId = ${robotId}`);
+    useEffect(() => {
+        if (!robotId || robotId === '') return;
 
         async function fetchData() {
             setLoading(true);
-            setErrorMsg(null);
-            
             try {
-                const { data: events, error: eventsError } = await supabase
-                    .from('signal_trace_events')
-                    .select('*')
-                    .eq('robot_id', robotId)
-                    .order('bar_timestamp', { ascending: false })
-                    .limit(1000);
+                // Fetch Robot Status
+                const { data: robot } = await supabase.from('robots').select('*').eq('id', robotId).single();
+                setRobotStatus(robot);
 
-                if (eventsError) {
-                    console.error("[PIPELINE_MONITOR] signal_trace_events query failed", {
-                        robotId,
-                        message: eventsError.message,
-                        code: eventsError.code,
-                        details: eventsError.details
-                    });
-                    setErrorMsg(`Query failed: ${eventsError.message}`);
-                    setLoading(false);
-                    return;
-                }
-
-                if (events) {
-                    setTraces(events);
-                    console.log(`[PIPELINE_MONITOR] trace count = ${events.length}`);
-                }
-
-                const { data: robot, error: robotError } = await supabase
-                    .from('robots')
-                    .select('status, last_heartbeat_at, current_state')
-                    .eq('id', robotId)
-                    .single();
+                // Fetch Heartbeat
+                const { data: heartbeats } = await supabase.from('core_events')
+                    .select('*').eq('robot_id', robotId).eq('event_type', 'PRICE_HEARTBEAT_EVENT')
+                    .order('timestamp', { ascending: false }).limit(1);
                 
-                if (robotError) {
-                    console.error("[PIPELINE_MONITOR] robots query failed", robotError);
-                } else if (robot) {
-                    setRobotStatus(robot);
-                    console.log(`[PIPELINE_MONITOR] heartbeat robotId = ${robotId} (${robot.last_heartbeat_at})`);
-                }
-
-                // Fetch Realtime Price Feed Heartbeat
-                const { data: heartbeats } = await supabase
-                    .from('core_events')
-                    .select('*')
-                    .eq('robot_id', robotId)
-                    .eq('event_type', 'PRICE_HEARTBEAT_EVENT')
-                    .order('timestamp', { ascending: false })
-                    .limit(1);
-
-                if (heartbeats && heartbeats.length > 0) {
-                    setFeedHeartbeat(heartbeats[0].payload);
-                } else {
-                    setFeedHeartbeat(null);
-                }
-
-                // Fetch Forensic Events
-                const { data: forensics } = await supabase
-                    .from('core_events')
-                    .select('*')
-                    .eq('robot_id', robotId)
-                    .in('event_type', ['REALTIME_PRICE_FEED_CONNECTED', 'REALTIME_PRICE_FEED_STALE', 'REALTIME_PRICE_FEED_DISCONNECTED', 'RETRACEMENT_ZONE_TOUCHED', 'RETRACEMENT_ENTRY_TRIGGERED'])
-                    .order('timestamp', { ascending: false })
-                    .limit(5);
-                if (forensics) setForensicEvents(forensics);
+                if (heartbeats && heartbeats.length > 0) setFeedHeartbeat(heartbeats[0].payload);
 
                 // Fetch Wait Retracement signal info if needed
                 if (robot?.current_state === 'WAIT_RETRACEMENT') {
-                    const { data: signals } = await supabase
-                        .from('core_events')
-                        .select('payload')
-                        .eq('robot_id', robotId)
-                        .eq('event_type', 'STRATEGY_SIGNAL_EVENT')
-                        .order('timestamp', { ascending: false })
-                        .limit(1);
-                    if (signals && signals.length > 0) {
-                        setWaitRetracementSignal(signals[0].payload);
+                    const { data: signals } = await supabase.from('core_events')
+                        .select('payload').eq('robot_id', robotId).eq('event_type', 'STRATEGY_SIGNAL_EVENT')
+                        .order('timestamp', { ascending: false }).limit(1);
+                    if (signals && signals.length > 0) setWaitRetracementSignal(signals[0].payload);
+                }
+
+                // Fetch Golden Traces (Latest 10 Signals)
+                const { data: latestSignals } = await supabase.from('core_events')
+                    .select('*').eq('robot_id', robotId).eq('event_type', 'STRATEGY_SIGNAL_EVENT')
+                    .order('timestamp', { ascending: false }).limit(10);
+
+                if (latestSignals && latestSignals.length > 0) {
+                    const correlationIds = latestSignals.map(s => s.payload?.trace?.correlationId).filter(Boolean);
+                    
+                    const { data: relatedEvents } = await supabase.from('core_events')
+                        .select('*').eq('robot_id', robotId)
+                        .in('event_type', [
+                            'STRATEGY_SIGNAL_EVENT', 'REALTIME_PRICE_EVENT', 'RETRACEMENT_ZONE_TOUCHED', 
+                            'RETRACEMENT_ENTRY_TRIGGERED', 'STATE_TRANSITION_EVENT', 'TRADE_PLAN_EVENT', 
+                            'POSITION_OPENED_EVENT'
+                        ])
+                        .in('payload->trace->>correlationId', correlationIds)
+                        .order('event_sequence', { ascending: true }); // Use sequence for proper causal ordering
+
+                    // Group by correlation_id
+                    const tracesMap = new Map();
+                    latestSignals.forEach(sig => {
+                        tracesMap.set(sig.payload?.trace?.correlationId, { signal: sig, events: [] });
+                    });
+
+                    if (relatedEvents) {
+                        relatedEvents.forEach(evt => {
+                            const cid = evt.payload?.trace?.correlationId;
+                            if (tracesMap.has(cid)) {
+                                tracesMap.get(cid).events.push(evt);
+                            }
+                        });
                     }
-                } else {
-                    setWaitRetracementSignal(null);
+
+                    // Also fetch any events where correlationId was injected by RiskEngine inside trace
+                    const { data: relatedEvents2 } = await supabase.from('core_events')
+                        .select('*').eq('robot_id', robotId)
+                        .in('event_type', ['TRADE_PLAN_EVENT', 'POSITION_OPENED_EVENT', 'RETRACEMENT_ENTRY_TRIGGERED', 'STATE_TRANSITION_EVENT', 'RETRACEMENT_ZONE_TOUCHED'])
+                        .order('event_sequence', { ascending: true });
+                        
+                    if (relatedEvents2) {
+                         relatedEvents2.forEach(evt => {
+                            const cid = evt.payload?.trace?.correlationId;
+                            if (tracesMap.has(cid)) {
+                                // check if not already added
+                                if (!tracesMap.get(cid).events.some((e:any) => e.id === evt.id)) {
+                                    tracesMap.get(cid).events.push(evt);
+                                }
+                            }
+                        });
+                    }
+
+                    setGoldenTraces(Array.from(tracesMap.values()));
                 }
 
             } catch (err: any) {
                 console.error("[PIPELINE_MONITOR] Unexpected error", err);
-                setErrorMsg(`Unexpected error: ${err.message}`);
+                setErrorMsg(err.message);
             }
-            
             setLoading(false);
         }
         
         fetchData();
         
-        const sub = supabase.channel('signal_trace')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'signal_trace_events', filter: `robot_id=eq.${robotId}` }, () => {
-                fetchData();
-            })
-            .subscribe();
-
         const subCore = supabase.channel('core_events_ch')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'core_events', filter: `robot_id=eq.${robotId}` }, () => {
                 fetchData();
             })
             .subscribe();
 
-        return () => { 
-            sub.unsubscribe(); 
-            subCore.unsubscribe();
-        }
+        return () => { subCore.unsubscribe(); }
     }, [robotId, supabase]);
 
-    const stats = useMemo(() => {
-        if (traces.length === 0) return null;
-        
-        const sorted = [...traces].sort((a, b) => a.bar_timestamp - b.bar_timestamp);
-        const firstCandle = sorted[0].bar_timestamp;
-        const lastCandle = sorted[sorted.length - 1].bar_timestamp;
-        
-        const expectedCount = Math.floor((lastCandle - firstCandle) / 60000) + 1;
-        const receivedCount = traces.length;
-        const missingCount = expectedCount - receivedCount;
-        
-        let completedPipeline = 0;
-        const breaks = { TV: 0, Cloudflare: 0, Vercel: 0, Database: 0, Poller: 0, Adapter: 0, Strategy: 0, NOT_OBSERVED: 0 };
-        
-        traces.forEach(t => {
-            const fb = getFirstBreak(t);
-            if (!fb) completedPipeline++;
-            else (breaks as any)[fb] = ((breaks as any)[fb] || 0) + 1;
-        });
-        
-        if (missingCount > 0) {
-            breaks.NOT_OBSERVED += missingCount;
-        }
-
-        const topBreak = Object.entries(breaks)
-            .filter(([k,v]) => v > 0)
-            .sort((a,b) => b[1] - a[1])[0];
-
-        const gaps = [];
-        for (let i = 0; i < sorted.length - 1; i++) {
-            const current = sorted[i].bar_timestamp;
-            const next = sorted[i+1].bar_timestamp;
-            const diff = next - current;
-            if (diff > 60000) {
-                const missingInGap = Math.floor(diff / 60000) - 1;
-                gaps.push({
-                    from: current,
-                    to: next,
-                    missing: missingInGap,
-                    firstBreak: 'UNKNOWN / NOT_OBSERVED'
-                });
-            }
-        }
-
-        const gapEventsCount = gaps.length;
-        const largestGap = gaps.length > 0 ? Math.max(...gaps.map(g => g.missing)) : 0;
-        const lastGapObj = gaps.length > 0 ? gaps[gaps.length - 1] : null;
-
-        return { expectedCount, receivedCount, missingCount, completedPipeline, breaks, topBreak, gaps, sorted, gapEventsCount, largestGap, lastGapObj };
-    }, [traces]);
-
-    const isWorkerOnline = robotStatus?.last_heartbeat_at && (Date.now() - new Date(robotStatus.last_heartbeat_at).getTime() < 60000);
-
     return (
-        <div className="p-6 space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold">PAPER 1M — SIGNAL MONITOR</h1>
-                    <p className="text-muted-foreground">Forensic Observability for 1M Webhook Signal Pipeline</p>
+        <div className="w-full mx-auto space-y-6">
+            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h1 className="text-2xl font-bold">PAPER 1M - SIGNAL MONITOR</h1>
+                        <p className="text-muted-foreground">E2E Observability for Phase 3 Signal Pipeline</p>
+                    </div>
                 </div>
-                <Badge variant="outline" className="text-sm font-mono">{robotId || 'Unknown ID'}</Badge>
-            </div>
-            
-            {errorMsg && (
-                <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                    <strong>Error:</strong> {errorMsg}
-                </div>
-            )}
 
-            {/* REALTIME PRICE & RETRACEMENT MONITOR */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card className="border-indigo-200">
-                    <CardHeader className="bg-indigo-50/50 py-3">
-                        <CardTitle className="text-sm font-semibold text-indigo-800">REALTIME PRICE FEED</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4 space-y-3">
-                        {feedHeartbeat ? (
-                            <>
-                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                    <span className="text-slate-500">Symbol</span>
-                                    <span className="font-mono font-medium">{feedHeartbeat.symbol}</span>
-                                    
-                                    <span className="text-slate-500">Last Price</span>
-                                    <span className="font-mono font-bold text-lg">{feedHeartbeat.price?.toFixed(2)}</span>
-                                    
-                                    <span className="text-slate-500">Market Time</span>
-                                    <span className="font-mono text-xs">
-                                        {new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(new Date(feedHeartbeat.eventTimestamp))} UTC
-                                    </span>
-                                    
-                                    <span className="text-slate-500">VN Time</span>
-                                    <span className="font-mono text-xs">
-                                        {new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(new Date(feedHeartbeat.eventTimestamp))}
-                                    </span>
-                                    
-                                    <span className="text-slate-500">Latency</span>
-                                    <span className="font-mono">{Math.max(0, Date.now() - feedHeartbeat.eventTimestamp)} ms</span>
-                                </div>
-                                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
-                                    <div className={`h-3 w-3 rounded-full ${feedHeartbeat.status === 'CONNECTED' ? 'bg-green-500' : feedHeartbeat.status === 'STALE' ? 'bg-yellow-500' : 'bg-red-500'}`} />
-                                    <span className={`font-bold ${feedHeartbeat.status === 'CONNECTED' ? 'text-green-700' : feedHeartbeat.status === 'STALE' ? 'text-yellow-700' : 'text-red-700'}`}>
-                                        {feedHeartbeat.status}
-                                    </span>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center py-6 text-slate-400">
-                                <div className="h-3 w-3 rounded-full bg-red-500 mb-2" />
-                                <span className="font-bold text-red-700">DISCONNECTED</span>
-                                <span className="text-xs mt-1">No heartbeat received</span>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {robotStatus?.current_state === 'WAIT_RETRACEMENT' && waitRetracementSignal && (
-                    <Card className="border-amber-200">
-                        <CardHeader className="bg-amber-50/50 py-3">
-                            <CardTitle className="text-sm font-semibold text-amber-800">RETRACEMENT MONITOR</CardTitle>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* FEED HEARTBEAT */}
+                    <Card className="border-indigo-100">
+                        <CardHeader className="bg-indigo-50/50 py-3 flex flex-row items-center justify-between">
+                            <CardTitle className="text-sm font-semibold text-indigo-800">REALTIME PRICE FEED</CardTitle>
                         </CardHeader>
                         <CardContent className="p-4 space-y-3">
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                                <span className="text-slate-500">Direction</span>
-                                <span className={`font-bold ${waitRetracementSignal.direction === 'LONG' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                    {waitRetracementSignal.direction}
-                                </span>
-                                
-                                <span className="text-slate-500">Zone</span>
-                                <span className="font-mono text-amber-700 font-medium">
-                                    {waitRetracementSignal.entryTrigger?.lower?.toFixed(2)} → {waitRetracementSignal.entryTrigger?.upper?.toFixed(2)}
-                                </span>
-                                
-                                <span className="text-slate-500">Current</span>
-                                <span className="font-mono font-bold">{feedHeartbeat?.price?.toFixed(2) || 'N/A'}</span>
-                                
-                                <span className="text-slate-500">Status</span>
-                                {(() => {
-                                    const entryEvent = forensicEvents.find(e => e.event_type === 'RETRACEMENT_ENTRY_TRIGGERED');
-                                    const touchedEvent = forensicEvents.find(e => e.event_type === 'RETRACEMENT_ZONE_TOUCHED');
-                                    
-                                    if (entryEvent) {
-                                        return (
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-emerald-600">🟢 ENTRY TRIGGERED</span>
-                                                <span className="text-xs text-slate-500 font-mono mt-1">Price: {entryEvent.payload.entry_price}</span>
-                                            </div>
-                                        );
-                                    }
-                                    if (touchedEvent) {
-                                        return <span className="font-bold text-emerald-600">🟢 ZONE TOUCHED</span>;
-                                    }
-                                    return <span className="font-bold text-amber-600">WAITING FOR RETRACEMENT</span>;
-                                })()}
-                            </div>
+                            {feedHeartbeat ? (
+                                <>
+                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                        <span className="text-slate-500">Symbol</span>
+                                        <span className="font-mono font-medium">{feedHeartbeat.symbol}</span>
+                                        
+                                        <span className="text-slate-500">Last Price</span>
+                                        <span className="font-mono font-bold text-lg">{feedHeartbeat.price?.toFixed(2)}</span>
+                                        
+                                        <span className="text-slate-500">Market Time (UTC)</span>
+                                        <span className="font-mono text-xs">
+                                            {new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(new Date(feedHeartbeat.eventTimestamp))}
+                                        </span>
+                                    </div>
+                                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
+                                        <div className={`h-3 w-3 rounded-full ${feedHeartbeat.status === 'CONNECTED' ? 'bg-green-500' : feedHeartbeat.status === 'STALE' ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                                        <span className={`font-bold ${feedHeartbeat.status === 'CONNECTED' ? 'text-green-700' : feedHeartbeat.status === 'STALE' ? 'text-yellow-700' : 'text-red-700'}`}>
+                                            {feedHeartbeat.status}
+                                        </span>
+                                    </div>
+                                </>
+                            ) : (
+                                <p className="text-slate-500 text-sm">Waiting for connection...</p>
+                            )}
                         </CardContent>
                     </Card>
-                )}
-            </div>
 
-            {/* FORENSIC EVENTS */}
-            {forensicEvents.length > 0 && (
-                <Card className="border-slate-200">
-                    <CardHeader className="bg-slate-50/50 py-3">
-                        <CardTitle className="text-sm font-semibold text-slate-800">Forensic Entry Events</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>UTC Time</TableHead>
-                                    <TableHead>Event Type</TableHead>
-                                    <TableHead>Price</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {forensicEvents.map((evt, i) => (
-                                    <TableRow key={i}>
-                                        <TableCell className="font-mono text-xs">
-                                            {new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(new Date(evt.timestamp))}
-                                        </TableCell>
-                                        <TableCell className="font-mono text-xs font-semibold text-indigo-700">
-                                            {evt.event_type}
-                                        </TableCell>
-                                        <TableCell className="font-mono text-xs">
-                                            {evt.payload.price || evt.payload.entry_price || 'N/A'}
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            )}
+                    {/* RETRACEMENT MONITOR */}
+                    {robotStatus?.current_state === 'WAIT_RETRACEMENT' && waitRetracementSignal && (
+                        <Card className="border-amber-200">
+                            <CardHeader className="bg-amber-50/50 py-3 flex flex-row items-center justify-between">
+                                <CardTitle className="text-sm font-semibold text-amber-800">RETRACEMENT MONITOR</CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4 space-y-3">
+                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                    <span className="text-slate-500">Direction</span>
+                                    <span className={`font-bold ${waitRetracementSignal.direction === 'LONG' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        {waitRetracementSignal.direction}
+                                    </span>
+                                    
+                                    <span className="text-slate-500">Zone</span>
+                                    <span className="font-mono text-amber-700 font-medium">
+                                        {waitRetracementSignal.entryTrigger?.lower?.toFixed(2)} - {waitRetracementSignal.entryTrigger?.upper?.toFixed(2)}
+                                    </span>
+                                    
+                                    <span className="text-slate-500">Current Price</span>
+                                    <span className="font-mono font-bold">{feedHeartbeat?.price?.toFixed(2) || 'N/A'}</span>
+                                    
+                                    <span className="text-slate-500">Status</span>
+                                    <span className="font-bold text-amber-600">WAITING FOR RETRACEMENT</span>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+                </div>
 
-            {/* D. SUMMARY PANEL */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card className="bg-slate-50">
-                    <CardHeader className="py-3 px-4"><CardTitle className="text-sm text-slate-500">Pipeline Coverage</CardTitle></CardHeader>
-                    <CardContent className="px-4 pb-4">
-                        <div className="text-2xl font-bold">{stats ? ((stats.receivedCount / stats.expectedCount)*100).toFixed(2) : 0}%</div>
-                        <div className="text-xs text-slate-500 mt-1">Expected: {stats?.expectedCount || 0} | Received: {stats?.receivedCount || 0}</div>
-                        <div className="text-xs text-red-500 mt-0.5">Missing: {stats?.missingCount || 0}</div>
-                    </CardContent>
-                </Card>
-                <Card className="bg-slate-50">
-                    <CardHeader className="py-3 px-4"><CardTitle className="text-sm text-slate-500">Gap Events</CardTitle></CardHeader>
-                    <CardContent className="px-4 pb-4">
-                        <div className="text-2xl font-bold text-orange-600">{stats?.gapEventsCount || 0}</div>
-                        <div className="text-xs text-slate-500 mt-1">Largest Gap: {stats?.largestGap || 0} candles</div>
-                        <div className="text-xs text-slate-500 mt-0.5">
-                            Last Gap: {stats?.lastGapObj ? `${new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }).format(new Date(stats.lastGapObj.from))} → ${new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' }).format(new Date(stats.lastGapObj.to))}` : 'None'}
+                {/* GOLDEN TRACE MONITOR */}
+                <div className="mt-8">
+                    <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-indigo-600" />
+                        Golden Trace Monitor
+                    </h2>
+                    
+                    {goldenTraces.length === 0 && !loading && (
+                        <div className="p-8 text-center text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+                            No signals found in Golden Trace format.
                         </div>
-                    </CardContent>
-                </Card>
-                <Card className="bg-slate-50">
-                    <CardHeader className="py-3 px-4"><CardTitle className="text-sm text-slate-500">Completed Pipeline</CardTitle></CardHeader>
-                    <CardContent className="px-4 pb-4">
-                        <div className="text-2xl font-bold text-emerald-600">{stats?.completedPipeline || 0}</div>
-                        <div className="text-xs text-slate-500 mt-1">Successfully evaluated by Strategy</div>
-                    </CardContent>
-                </Card>
-                <Card className="bg-slate-50">
-                    <CardHeader className="py-3 px-4"><CardTitle className="text-sm text-slate-500">Worker Status</CardTitle></CardHeader>
-                    <CardContent className="px-4 pb-4">
-                        <div className={`text-2xl font-bold ${isWorkerOnline ? 'text-emerald-600' : 'text-red-600'}`}>
-                            {isWorkerOnline ? 'ONLINE' : 'OFFLINE'}
-                        </div>
-                        <div className="text-xs text-slate-500 mt-1">
-                            Heartbeat: {robotStatus?.last_heartbeat_at ? new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(robotStatus.last_heartbeat_at)) : 'N/A'}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+                    )}
 
-            {/* C. GAP ANALYSIS */}
-            {stats && stats.gaps.length > 0 && (() => {
-                const visibleGaps = showAllGaps ? stats.gaps : stats.gaps.slice(0, 20);
-                const hasMore = stats.gaps.length > 20;
+                    <div className="space-y-6">
+                        {goldenTraces.map((traceGroup, i) => {
+                            const events = traceGroup.events || [];
+                            const hasPositionOpened = events.some((e:any) => e.event_type === 'POSITION_OPENED_EVENT');
+                            const hasTradePlan = events.some((e:any) => e.event_type === 'TRADE_PLAN_EVENT');
+                            
+                            // Sort events properly by sequence, then by internal order for same sequence
+                            const typeOrder: Record<string, number> = {
+                                'STRATEGY_SIGNAL_EVENT': 1,
+                                'STATE_TRANSITION_EVENT': 2,
+                                'REALTIME_PRICE_EVENT': 3,
+                                'RETRACEMENT_ZONE_TOUCHED': 4,
+                                'RETRACEMENT_ENTRY_TRIGGERED': 5,
+                                'TRADE_PLAN_EVENT': 6,
+                                'POSITION_OPENED_EVENT': 7
+                            };
+                            events.sort((a:any, b:any) => {
+                                if (a.event_sequence !== b.event_sequence) return a.event_sequence - b.event_sequence;
+                                return typeOrder[a.event_type] - typeOrder[b.event_type];
+                            });
 
-                return (
-                <Card className="border-red-200">
-                    <CardHeader className="bg-red-50/50 py-3 flex flex-row items-center justify-between">
-                        <CardTitle className="text-sm font-semibold text-red-800">Gap Analysis (Missing Candles)</CardTitle>
-                        {!showAllGaps && hasMore && (
-                            <Badge variant="outline" className="text-xs bg-white text-red-700 hover:bg-red-50 cursor-pointer" onClick={() => setShowAllGaps(true)}>
-                                Xem thêm {stats.gaps.length - 20} gaps
-                            </Badge>
-                        )}
-                        {showAllGaps && hasMore && (
-                            <Badge variant="outline" className="text-xs bg-white text-red-700 hover:bg-red-50 cursor-pointer" onClick={() => setShowAllGaps(false)}>
-                                Thu gọn
-                            </Badge>
-                        )}
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>From (UTC)</TableHead>
-                                    <TableHead>To (UTC)</TableHead>
-                                    <TableHead>Missing Count</TableHead>
-                                    <TableHead>Previous Node Break</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {visibleGaps.map((gap, i) => (
-                                    <TableRow key={i}>
-                                        <TableCell className="font-mono text-xs">{new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(gap.from))}</TableCell>
-                                        <TableCell className="font-mono text-xs">{new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(gap.to))}</TableCell>
-                                        <TableCell className="font-bold text-red-600">{gap.missing}</TableCell>
-                                        <TableCell>{gap.firstBreak}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-                );
-            })()}
+                            // Check Trace Completeness
+                            let traceStatus = 'INCOMPLETE TRACE';
+                            let statusColor = 'text-amber-600 bg-amber-50 border-amber-200';
+                            
+                            if (hasPositionOpened) {
+                                traceStatus = 'SUCCESS';
+                                statusColor = 'text-emerald-700 bg-emerald-50 border-emerald-200';
+                            } else if (hasTradePlan) {
+                                traceStatus = 'EXECUTION FAILED (INCOMPLETE TRACE)';
+                                statusColor = 'text-rose-700 bg-rose-50 border-rose-200';
+                            }
 
-            {/* A & B. PIPELINE TRACE (Realtime & History) */}
-            <Card className="bg-white border-slate-200 shadow-sm">
-                <CardHeader className="flex flex-row items-center justify-between py-4 border-b border-slate-100">
-                    <CardTitle className="text-lg text-slate-800">Realtime Pipeline Trace</CardTitle>
-                    <div className="text-xs text-slate-500 font-medium">Displaying {Math.min(traces.length, traceLimit)} of {traces.length} observations</div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <div className="overflow-x-auto max-h-[600px]">
-                        <Table>
-                            <TableHeader className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200">
-                                <TableRow className="hover:bg-slate-50">
-                                    <TableHead className="w-[150px] text-slate-600 font-semibold">Bar Time</TableHead>
-                                    <TableHead className="text-center text-slate-600 font-semibold w-[60px]">TV</TableHead>
-                                    <TableHead className="text-center text-slate-600 font-semibold w-[60px]">CF</TableHead>
-                                    <TableHead className="text-center text-slate-600 font-semibold w-[80px]">Vercel</TableHead>
-                                    <TableHead className="text-center text-slate-600 font-semibold w-[60px]">DB</TableHead>
-                                    <TableHead className="text-center text-slate-600 font-semibold w-[80px]">Poller</TableHead>
-                                    <TableHead className="text-center text-slate-600 font-semibold w-[80px]">Adapter</TableHead>
-                                    <TableHead className="text-left text-slate-600 font-semibold w-[120px]">Strategy</TableHead>
-                                    <TableHead className="text-right text-slate-600 font-semibold">Correlation ID</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody className="divide-y divide-slate-100">
-                                {loading ? (
-                                    <TableRow>
-                                        <TableCell colSpan={9} className="text-center py-8 text-slate-500">Loading pipeline traces...</TableCell>
-                                    </TableRow>
-                                ) : traces.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={9} className="text-center py-8 text-slate-500">No traces found for this robot.</TableCell>
-                                    </TableRow>
-                                ) : (
-                                    traces.slice(0, traceLimit).map((trace, index) => {
-                                        const d = new Date(trace.bar_timestamp);
-                                        const utcTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(d);
-                                        const vnTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(d);
-                                        
-                                        let gapWarning = null;
-                                        if (index < traces.length - 1) {
-                                            const olderTrace = traces[index + 1];
-                                            const diffMs = trace.bar_timestamp - olderTrace.bar_timestamp;
-                                            if (diffMs > 60000) {
-                                                const missingCount = Math.floor(diffMs / 60000) - 1;
-                                                const firstMissing = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(olderTrace.bar_timestamp + 60000));
-                                                const lastMissing = new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(trace.bar_timestamp - 60000));
-                                                gapWarning = (
-                                                    <TableRow key={`gap-${trace.candle_trace_id}`} className="bg-orange-50/50 hover:bg-orange-50/50">
-                                                        <TableCell colSpan={9} className="text-center py-3">
-                                                            <div className="flex flex-col items-center justify-center text-orange-700 font-mono text-xs">
-                                                                <span className="font-bold flex items-center gap-1">
-                                                                    <span>⚠</span> GAP DETECTED
-                                                                </span>
-                                                                <span>MISSING {missingCount} CANDLES</span>
-                                                                <span className="text-orange-500">{firstMissing} → {lastMissing} (UTC)</span>
-                                                                <span className="text-[10px] mt-1 bg-orange-100 text-orange-600 px-2 py-0.5 rounded">STATUS: NOT OBSERVED</span>
-                                                            </div>
+                            return (
+                                <Card key={traceGroup.signal.id} className="border-slate-200 overflow-hidden">
+                                    <CardHeader className="bg-slate-50/80 py-3 border-b border-slate-100 flex flex-row items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <CardTitle className="text-sm font-bold text-slate-800 font-mono">
+                                                {traceGroup.signal.payload?.trace?.correlationId}
+                                            </CardTitle>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold border ${statusColor}`}>
+                                                {traceStatus}
+                                            </span>
+                                        </div>
+                                        <span className="text-xs text-slate-500 font-mono">
+                                            {new Date(traceGroup.signal.timestamp).toLocaleString()}
+                                        </span>
+                                    </CardHeader>
+                                    <CardContent className="p-0">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow className="bg-slate-50/50">
+                                                    <TableHead className="w-[180px]">Timestamp</TableHead>
+                                                    <TableHead className="w-[80px]">Sequence</TableHead>
+                                                    <TableHead>Event Type</TableHead>
+                                                    <TableHead>Details</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {events.map((evt:any, idx:number) => (
+                                                    <TableRow key={evt.id} className="hover:bg-slate-50/80">
+                                                        <TableCell className="font-mono text-xs text-slate-600">
+                                                            {new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 }).format(new Date(evt.timestamp))} UTC
+                                                        </TableCell>
+                                                        <TableCell className="font-mono text-xs text-indigo-600 font-medium">
+                                                            {evt.event_sequence}
+                                                        </TableCell>
+                                                        <TableCell className="font-mono text-xs font-bold text-slate-700">
+                                                            {evt.event_type}
+                                                        </TableCell>
+                                                        <TableCell className="font-mono text-xs text-slate-600">
+                                                            {evt.event_type === 'STATE_TRANSITION_EVENT' && `State: ${evt.payload.newState}`}
+                                                            {evt.event_type === 'STRATEGY_SIGNAL_EVENT' && `Direction: ${evt.payload.direction}`}
+                                                            {evt.event_type === 'REALTIME_PRICE_EVENT' && `Price: ${evt.payload.trade?.p || evt.payload.price}`}
+                                                            {evt.event_type === 'RETRACEMENT_ENTRY_TRIGGERED' && `Price: ${evt.payload.entry_price || evt.payload.price || evt.payload.entryReferencePrice}`}
+                                                            {evt.event_type === 'TRADE_PLAN_EVENT' && `Plan: ${evt.payload.direction} @ ${evt.payload.entryReferencePrice}`}
+                                                            {evt.event_type === 'POSITION_OPENED_EVENT' && <span className="text-emerald-600 font-bold">Position Opened Successfully</span>}
+                                                            <div className="text-[10px] text-slate-400 mt-1">Parent: {evt.payload?.trace?.parentId || 'None'}</div>
                                                         </TableCell>
                                                     </TableRow>
-                                                );
-                                            }
-                                        }
-
-                                        return (
-                                            <Fragment key={trace.candle_trace_id}>
-                                            <TableRow 
-                                                className="hover:bg-slate-50 cursor-pointer font-mono text-xs transition-colors"
-                                                title={`Received at: ${new Date(trace.created_at).toISOString()}`}
-                                            >
-                                                <TableCell className="font-medium text-slate-900">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold">UTC: {utcTime}</span>
-                                                        <span className="text-slate-500 mt-0.5 font-medium">VN: {vnTime}</span>
-                                                    </div>
-                                                </TableCell>
-                                                
-                                                <TableCell><StatusDot status={trace.tv_status === 'GREEN' ? 'GREEN' : 'UNKNOWN'} /></TableCell>
-                                                <TableCell><StatusDot status={trace.cf_status} /></TableCell>
-                                                <TableCell><StatusDot status={trace.vercel_status} /></TableCell>
-                                                <TableCell><StatusDot status={trace.db_status} /></TableCell>
-                                                <TableCell><StatusDot status={trace.poller_status} /></TableCell>
-                                                <TableCell><StatusDot status={trace.adapter_status} /></TableCell>
-                                                
-                                                <TableCell>
-                                                    <div className="flex items-center space-x-3">
-                                                        <StatusDot status={trace.strategy_status} />
-                                                        {trace.strategy_status === 'GREEN' && trace.strategy_result && (
-                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
-                                                                trace.strategy_result === 'LONG' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
-                                                                trace.strategy_result === 'SHORT' ? 'bg-rose-100 text-rose-700 border-rose-200' :
-                                                                'bg-slate-100 text-slate-600 border-slate-200'
-                                                            }`}>
-                                                                {trace.strategy_result}
-                                                            </span>
-                                                        )}
-                                                        {trace.strategy_status !== 'GREEN' && (
-                                                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-slate-100 text-slate-500 border border-slate-200">
-                                                                WAITING
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                
-                                                <TableCell className="text-right text-slate-400 text-[10px] max-w-[120px] truncate" title={trace.correlation_id}>
-                                                    {trace.correlation_id || 'None'}
-                                                </TableCell>
-                                            </TableRow>
-                                            {gapWarning}
-                                            </Fragment>
-                                        );
-                                    })
-                                )}
-                            </TableBody>
-                        </Table>
-                        {traces.length > traceLimit && (
-                            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-center sticky left-0 rounded-b-lg">
-                                <button 
-                                    onClick={() => setTraceLimit(prev => prev + 10)}
-                                    className="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-md hover:bg-slate-50 transition-colors shadow-sm"
-                                >
-                                    Xem thêm 10 dòng
-                                </button>
-                            </div>
-                        )}
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
                     </div>
-                </CardContent>
-            </Card>
+                </div>
+            </div>
         </div>
     );
 }
