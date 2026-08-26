@@ -28,7 +28,13 @@ async function bootstrap() {
         deployment: process.env.RAILWAY_DEPLOYMENT_ID || 'local',
         process_id: process.pid,
         environment: envStr,
-        timestamp_utc: new Date().toISOString()
+        timestamp_utc: new Date().toISOString(),
+        fingerprint: {
+            SIGNAL_PIPELINE_VERSION: 2,
+            REALTIME_FEED: 'TRADE',
+            SIGNAL_ADAPTER: 'TV_SIGNAL',
+            RETRACEMENT: '10%'
+        }
     }));
 
     const runtimeManager = new RuntimeManager();

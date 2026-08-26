@@ -4,7 +4,7 @@ import { StateMachineEngine } from '@/core/engine/runtime/StateMachineEngine';
 import { RiskEngine } from '@/core/engine/risk/RiskEngine';
 import { PaperExecutionEngine } from '@/core/engine/execution/PaperExecutionEngine';
 import { PaperPositionTracker } from '@/core/engine/execution/PaperPositionTracker';
-import { TradingViewAdapter } from '@/core/adapters/tradingview/TradingViewAdapter';
+import { TradingViewSignalAdapter } from '@/core/adapters/tradingview/TradingViewSignalAdapter';
 import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { EngineOrchestrator } from '@/core/engine/runtime/EngineOrchestrator';
 import { RealtimePriceFeed } from '@/core/engine/runtime/RealtimePriceFeed';
@@ -112,7 +112,7 @@ export class RobotRuntime {
 export class RuntimeManager {
     private runtimes: Map<string, RobotRuntime> = new Map();
     private orchestrator: EngineOrchestrator;
-    public adapter: TradingViewAdapter;
+    public adapter: TradingViewSignalAdapter;
     
     public strategyEngine: StrategyEngine;
     public stateMachine: StateMachineEngine;
@@ -122,7 +122,7 @@ export class RuntimeManager {
 
     constructor() {
         this.orchestrator = new EngineOrchestrator();
-        this.adapter = new TradingViewAdapter();
+        this.adapter = new TradingViewSignalAdapter();
         
         this.strategyEngine = new StrategyEngine();
         this.stateMachine = new StateMachineEngine();

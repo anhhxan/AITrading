@@ -132,8 +132,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     }
 
     // Deterministic Idempotency Check
+    // NEW SIGNAL IDENTITY RULE: robot_id + barTimestamp + direction
     const payloadStr = JSON.stringify(payload);
-    const hash = crypto.createHash('md5').update(payloadStr).digest('hex');
+    let identityString = payloadStr;
+    if (payload.direction && payload.barTimestamp) {
+        identityString = `${robotId}_${payload.barTimestamp}_${payload.direction}`;
+    }
+    
+    const hash = crypto.createHash('md5').update(identityString).digest('hex');
     const deterministicCommandId = `${hash.slice(0,8)}-${hash.slice(8,12)}-4${hash.slice(13,16)}-a${hash.slice(17,20)}-${hash.slice(20,32)}`;
     const hash_prefix = hash.slice(0, 10);
     const correlation_id = `tv_${hash_prefix}_${Date.now()}`;

@@ -10,7 +10,7 @@ export interface RealtimePriceEvent extends BaseEvent {
     sequenceId: number;
 }
 
-export type FeedStatus = 'CONNECTED' | 'STALE' | 'DISCONNECTED';
+export type FeedStatus = 'CONNECTING' | 'CONNECTED' | 'STALE' | 'DISCONNECTED';
 
 export class RealtimePriceFeed {
     private ws: WebSocket | null = null;
@@ -35,8 +35,15 @@ export class RealtimePriceFeed {
 
     private heartbeatInterval: any = null;
 
+    public isDataValid(): boolean {
+        return this.status === 'CONNECTED' && 
+               this.lastPrice > 0 && 
+               this.lastMarketTimestamp > 0 && 
+               (Date.now() - this.lastMarketTimestamp <= 5000);
+    }
+
     public start() {
-        if (this.status === 'CONNECTED') return;
+        if (this.status === 'CONNECTED' || this.status === 'CONNECTING') return;
         this.logForensic('REALTIME_PRICE_FEED_STARTED');
         this.connect();
         
@@ -52,7 +59,7 @@ export class RealtimePriceFeed {
         
         // Heartbeat for UI and forensics (every 5 seconds)
         this.heartbeatInterval = setInterval(() => {
-            if (this.status === 'CONNECTED') {
+            if (this.status === 'CONNECTED' || this.status === 'CONNECTING') {
                 this.publishHeartbeat();
             }
         }, 5000);
@@ -95,8 +102,8 @@ export class RealtimePriceFeed {
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
-            this.status = 'CONNECTED';
-            this.logForensic('REALTIME_PRICE_FEED_CONNECTED');
+            this.status = 'CONNECTING';
+            this.logForensic('REALTIME_PRICE_FEED_CONNECTING');
             
             // Ping to keep alive
             this.pingInterval = setInterval(() => {
@@ -118,9 +125,9 @@ export class RealtimePriceFeed {
                         this.lastMarketTimestamp = timestamp; // Event time
                         this.sequenceId++;
                         
-                        if (this.status === 'STALE' || this.status === 'DISCONNECTED') {
+                        if (this.status === 'STALE' || this.status === 'DISCONNECTED' || this.status === 'CONNECTING') {
                             this.status = 'CONNECTED';
-                            this.logForensic('REALTIME_PRICE_FEED_RECONNECTED');
+                            this.logForensic('REALTIME_PRICE_FEED_CONNECTED');
                         }
                         
                         this.publishEvent();
@@ -148,6 +155,10 @@ export class RealtimePriceFeed {
     }
 
     private async publishEvent() {
+        if (!this.isDataValid()) {
+            return; // Safety Rule: Do not publish price events if feed is STALE or CONNECTING
+        }
+
         const trace = EventFactory.createTrace(
             `ws-${this.sequenceId}`, 
             `ws-agg-${this.lastMarketTimestamp}`,
