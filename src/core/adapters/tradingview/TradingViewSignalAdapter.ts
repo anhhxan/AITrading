@@ -1,6 +1,7 @@
-import { randomUUID } from 'crypto';
+﻿import { randomUUID } from 'crypto';
 import { EventFactory } from '../../infrastructure/EventFactory';
 import { getSupabaseAdmin } from '../../../lib/supabase';
+import { SequenceAuthority } from '../../infrastructure/SequenceAuthority';
 
 export interface SignalWebhookPayload {
     signalId?: string;
@@ -27,7 +28,7 @@ export interface AdapterResult {
 }
 
 export class TradingViewSignalAdapter {
-    private sequences: Map<string, number> = new Map();
+    
 
     private canonicalizeTimeframe(tvTimeframe: string): string {
         if (tvTimeframe === '1') return '1m';
@@ -115,9 +116,8 @@ export class TradingViewSignalAdapter {
             };
         }
 
-        let seq = this.sequences.get(robotId) || 1;
-        const trace = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewSignalAdapter', seq++);
-        this.sequences.set(robotId, seq);
+        let seq = SequenceAuthority.next(robotId);
+        const trace = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewSignalAdapter', seq);
 
         // CREATE STRATEGY_SIGNAL_EVENT directly
         const signalEvent = EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, activeVersion, trace, {
@@ -155,3 +155,4 @@ export class TradingViewSignalAdapter {
         };
     }
 }
+

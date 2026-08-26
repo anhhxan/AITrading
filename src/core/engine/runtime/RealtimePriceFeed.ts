@@ -1,6 +1,7 @@
 
 import { BaseEvent, EventFactory } from '../../infrastructure/EventFactory';
 import { coreEventBus } from '../../infrastructure/EventBus';
+import { SequenceAuthority } from '../../infrastructure/SequenceAuthority';
 
 export interface RealtimePriceEvent extends BaseEvent {
     symbol: string;
@@ -25,7 +26,6 @@ export class RealtimePriceFeed {
     private staleCheckInterval: any = null;
     private pingInterval: any = null;
     
-    private sequenceId = 0;
     private engineId = 'RealtimePriceFeed_1';
 
     constructor(robotId: string, symbol: string) {
@@ -66,11 +66,12 @@ export class RealtimePriceFeed {
     }
     
     private async publishHeartbeat() {
+        const seq = SequenceAuthority.next(this.robotId);
         const trace = EventFactory.createTrace(
-            `ws-heartbeat-${this.sequenceId}`, 
+            `ws-heartbeat-${seq}`, 
             `ws-agg-${this.lastMarketTimestamp}`,
             this.engineId,
-            this.sequenceId
+            seq
         );
 
         const heartbeatEvent = EventFactory.createEvent(
@@ -123,7 +124,6 @@ export class RealtimePriceFeed {
                     if (price > 0 && timestamp > 0) {
                         this.lastPrice = price;
                         this.lastMarketTimestamp = timestamp; // Event time
-                        this.sequenceId++;
                         
                         if (this.status === 'STALE' || this.status === 'DISCONNECTED' || this.status === 'CONNECTING') {
                             this.status = 'CONNECTED';
@@ -159,11 +159,12 @@ export class RealtimePriceFeed {
             return; // Safety Rule: Do not publish price events if feed is STALE or CONNECTING
         }
 
+        const seq = SequenceAuthority.next(this.robotId);
         const trace = EventFactory.createTrace(
-            `ws-${this.sequenceId}`, 
+            `ws-${seq}`, 
             `ws-agg-${this.lastMarketTimestamp}`,
             this.engineId,
-            this.sequenceId
+            seq
         );
 
         const priceEvent = EventFactory.createEvent(
@@ -176,7 +177,7 @@ export class RealtimePriceFeed {
                 price: this.lastPrice,
                 eventTimestamp: this.lastMarketTimestamp,
                 source: 'BINANCE_FUTURES_TRADE',
-                sequenceId: this.sequenceId
+                sequenceId: seq
             }
         );
         
@@ -203,11 +204,12 @@ export class RealtimePriceFeed {
             timestamp: Date.now()
         }));
         
+        const seq = SequenceAuthority.next(this.robotId);
         const trace = EventFactory.createTrace(
             `ws-sys-${Date.now()}`,
             'sys',
             this.engineId,
-            0
+            seq
         );
 
         const sysEvent = EventFactory.createEvent(
