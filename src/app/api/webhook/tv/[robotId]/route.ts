@@ -4,16 +4,15 @@ import { upsertSignalTrace } from '@/lib/diagnostics';
 import crypto from 'crypto';
 
 export async function GET(req: NextRequest) {
-    const authHeader = req.headers.get('authorization');
     const expectedSecret = process.env.TV_WEBHOOK_SECRET;
-    const authVal = authHeader ? authHeader.replace('Bearer ', '') : '';
+    const url = new URL(req.url);
+    const providedSecret = url.searchParams.get('secret');
 
     return NextResponse.json({
         envExists: !!expectedSecret,
         envLength: expectedSecret ? expectedSecret.length : 0,
-        authReceived: !!authHeader,
-        authLength: authVal.length,
-        authMatchesEnv: expectedSecret && authVal === expectedSecret
+        authReceived: !!providedSecret,
+        authMatchesEnv: expectedSecret && providedSecret === expectedSecret
     }, { status: 200 });
 }
 
@@ -23,8 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     const robotId = resolvedParams.robotId;
     const request_id = req.headers.get('x-cf-request-id') || ('req_' + crypto.randomUUID().replace(/-/g, '').substring(0, 12));
     
-    // Authentication
-    const authHeader = req.headers.get('authorization');
+    // Authentication via Payload Secret
     const expectedSecret = process.env.TV_WEBHOOK_SECRET;
     
     let payload;
@@ -75,10 +73,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     if (!expectedSecret) {
         return NextResponse.json({ error: 'SERVER_MISCONFIGURED' }, { status: 500 });
     }
+
+    if (!payload) {
+        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
     
-    const authVal = authHeader ? authHeader.replace('Bearer ', '') : '';
-    const auth_valid = authVal === expectedSecret;
+    const auth_valid = payload.secret === expectedSecret;
     
+    // Remove secret from payload so it doesn't get logged or stored in DB
+    if (payload.secret) {
+        delete payload.secret;
+    }
+    
+    // Re-stringify the payload after deleting secret to keep identity string safe
+    const payloadStr = JSON.stringify(payload);
+
     console.log(JSON.stringify({
         event: 'VERCEL_AUTH_RESULT',
         request_id,
@@ -88,10 +97,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     if (!auth_valid) {
         if (barTimestamp !== 'unknown') upsertSignalTrace({ robot_id: robotId, bar_timestamp: Number(barTimestamp), vercel_status: 'RED' });
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!payload) {
-        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
     
     console.log(JSON.stringify({
@@ -133,7 +138,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
 
     // Deterministic Idempotency Check
     // NEW SIGNAL IDENTITY RULE: robot_id + barTimestamp + direction
-    const payloadStr = JSON.stringify(payload);
     let identityString = payloadStr;
     if (payload.direction && payload.barTimestamp) {
         identityString = `${robotId}_${payload.barTimestamp}_${payload.direction}`;

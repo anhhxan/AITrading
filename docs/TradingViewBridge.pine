@@ -81,7 +81,7 @@ plot(lower, title="Line 5 - lower", color=color.orange)
 
 if barstate.isrealtime and barstate.isconfirmed
 
-    jsonStr = '{"tvSymbol":"' + syminfo.ticker +
+    jsonStr = '{"secret":"YOUR_WEBHOOK_SECRET","tvSymbol":"' + syminfo.ticker +
       '","tvTickerId":"' + syminfo.tickerid +
       '","timeframe":"' + timeframe.period +
       '","barTimestamp":' + str.tostring(time) +
