@@ -100,9 +100,13 @@ async function bootstrap() {
         runtimeManager.heartbeatAll().catch(e => console.error('[Heartbeat] Error:', e));
     }, 10000);
 
+    const { ReconciliationJob } = require('./jobs/ReconciliationJob');
+    ReconciliationJob.start(300000); // 5 minutes
+
     process.on('SIGINT', () => {
         console.log('[Worker] Shutting down...');
         poller.stop();
+        ReconciliationJob.stop();
         process.exit(0);
     });
 }
