@@ -24,44 +24,41 @@ export class RobotRuntime {
         const supabase = getSupabaseAdmin();
         const { data: configData, error: configErr } = await supabase
             .from('robot_configs')
-            .select('*, robots!inner(*)')
+            .select(`
+                *,
+                robots (*),
+                risk_profile:risk_profiles (*)
+            `)
             .eq('robot_id', this.robotId)
             .eq('status', 'ACTIVE')
             .single();
 
         if (configErr || !configData) {
-            console.warn(`[RuntimeManager] Robot ${this.robotId} is missing config. Registering for heartbeat only.`);
+            console.error('[RuntimeManager] Error loading config:', configErr);
             return;
         }
 
-        // Event Sourcing Replay for True State
-        const { data: recentEvents } = await supabase
-            .from('core_events')
-            .select('event_type, payload, created_at')
+        // Hydration: Source of Truth is now active_setups (Phase 3.7)
+        const { data: activeSetup, error: setupErr } = await supabase
+            .from('active_setups')
+            .select('*')
             .eq('robot_id', this.robotId)
-            .in('event_type', ['STRATEGY_SIGNAL_EVENT', 'STATE_TRANSITION_EVENT'])
-            .order('created_at', { ascending: false })
-            .limit(100);
+            .single(); // Assuming one active setup per robot
 
-        let trueState = configData.robots.current_state || 'WAIT_SIGNAL';
+        let trueState = 'IDLE';
         let trueActiveSignal = null;
 
-        if (recentEvents && recentEvents.length > 0) {
-            // Replay events in chronological order (ascending)
-            const replayEvents = [...recentEvents].reverse();
-            for (const event of replayEvents) {
-                if (event.event_type === 'STRATEGY_SIGNAL_EVENT') {
-                    trueActiveSignal = event.payload;
-                    trueState = 'WAIT_RETRACEMENT';
-                } else if (event.event_type === 'STATE_TRANSITION_EVENT') {
-                    if (event.payload?.newState) {
-                        trueState = event.payload.newState;
-                        if (trueState !== 'WAIT_RETRACEMENT' && trueState !== 'READY_TO_ENTER') {
-                            trueActiveSignal = null;
-                        }
-                    }
-                }
-            }
+        if (activeSetup) {
+            trueState = activeSetup.state; // PENDING, ARM, ACTIVE
+            trueActiveSignal = {
+                setup_id: activeSetup.setup_id,
+                direction: activeSetup.direction,
+                trigger: activeSetup.trigger_price,
+                stop: activeSetup.stop_price,
+                snapshot: activeSetup.snapshot
+            };
+        } else {
+            trueState = configData.robots.current_state || 'IDLE';
         }
         
         // Register strategy

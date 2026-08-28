@@ -125,8 +125,13 @@ export class PaperExecutionEngine implements IEngine {
           });
           if (histErr) console.error('[PaperExecutionEngine] REVERSAL trade_history insert failed:', histErr);
 
-          // 4. Delete active_position
+          // 4. Delete active_position and close intent/order (Cleanup LIVE records)
           await supabase.from('active_positions').delete().eq('id', existingPos.id);
+          
+          if (closeIntentData) {
+              await supabase.from('active_orders').delete().eq('intent_id', closeIntentData.id);
+              await supabase.from('execution_intents').delete().eq('id', closeIntentData.id);
+          }
 
           const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
           const closedEvent = EventFactory.createEvent('POSITION_CLOSED_EVENT', event.robotId, event.configVersion || 1, trace, {
@@ -225,7 +230,11 @@ export class PaperExecutionEngine implements IEngine {
         return;
       }
 
-      // 5. Publish POSITION_OPENED_EVENT
+      // 5. Cleanup LIVE records (FILLED orders/intents are no longer LIVE)
+      await supabase.from('active_orders').delete().eq('id', orderData.id);
+      await supabase.from('execution_intents').delete().eq('id', intentId);
+
+      // 6. Publish POSITION_OPENED_EVENT
       const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
       const openedEvent = EventFactory.createEvent('POSITION_OPENED_EVENT', event.robotId, event.configVersion || 1, trace, {
         symbol: event.executionSymbol,
