@@ -36,7 +36,9 @@ export class ReconciliationJob {
             const { data: deadOrders, error: orderErr } = await supabase
                 .from('active_orders')
                 .select('*')
-                .in('status', ['FILLED', 'CANCELED', 'REJECTED', 'EXPIRED']);
+                .in('status', ['FILLED', 'CANCELED', 'REJECTED', 'EXPIRED'])
+                .order('created_at', { ascending: false })
+                .limit(1000);
 
             if (orderErr) {
                 console.error('[ReconciliationJob] Error fetching active_orders:', orderErr);
@@ -63,7 +65,9 @@ export class ReconciliationJob {
             const { data: deadIntents, error: intentErr } = await supabase
                 .from('execution_intents')
                 .select('*')
-                .in('status', ['FILLED', 'CANCELED', 'REJECTED', 'EXPIRED']);
+                .in('status', ['FILLED', 'CANCELED', 'REJECTED', 'EXPIRED'])
+                .order('created_at', { ascending: false })
+                .limit(1000);
 
             if (intentErr) {
                 console.error('[ReconciliationJob] Error fetching execution_intents:', intentErr);
