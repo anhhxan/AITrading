@@ -147,7 +147,13 @@ export class EventBus {
       }
 
       // Persistence Layer - Awaited for Vercel Serverless safety but isolated from Core failures
-      if (event.eventType === 'REALTIME_PRICE_EVENT') continue; // Do not save tick data to DB to save cost
+      const NOISE_EVENTS = [
+        'REALTIME_PRICE_EVENT', 'PRICE_HEARTBEAT_EVENT', 'WORKER_HEARTBEAT', 
+        'WORKER_HEARTBEAT_EVENT', 'SYSTEM_HEARTBEAT', 
+        'REALTIME_PRICE_FEED_STALE', 'REALTIME_PRICE_FEED_CONNECTING', 
+        'REALTIME_PRICE_FEED_DISCONNECTED', 'REALTIME_PRICE_FEED_CONNECTED'
+      ];
+      if (NOISE_EVENTS.includes(event.eventType)) continue; // Do not save tick/heartbeat data to DB to save cost
 
       try {
         const supabase = getSupabaseAdmin();

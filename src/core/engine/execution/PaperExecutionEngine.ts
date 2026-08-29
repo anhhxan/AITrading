@@ -22,6 +22,7 @@ export class PaperExecutionEngine implements IEngine {
 
   private async handleTradePlan(event: TradePlanEvent) {
     console.log(`[PAPER] EXECUTION_STARTED TEST_ID=${event.trace.correlationId} robot=${event.robotId}`);
+    console.log(`[PAPER] EVENT PAYLOAD:`, JSON.stringify(event, null, 2));
     const supabase = getSupabaseAdmin();
 
     try {
@@ -41,6 +42,72 @@ export class PaperExecutionEngine implements IEngine {
       if (robot.trading_mode !== 'PAPER') {
         console.log(`[PAPER] EXECUTION_SKIPPED TEST_ID=${event.trace.correlationId} reason=NOT_PAPER_MODE`);
         return;
+      }
+
+      if ((event as any).action === 'CLOSE') {
+          console.log(`[PaperExecutionEngine] STOP/CLOSE DETECTED for robot ${event.robotId}`);
+          const { data: existingPos } = await supabase.from('active_positions').select('*').eq('robot_id', event.robotId).limit(1).maybeSingle();
+          if (existingPos) {
+              const closeAction = existingPos.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
+              const closeClientOrderId = `PAPER-CLS-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
+              
+              const { data: closeIntentData } = await supabase.from('execution_intents').insert({
+                robot_id: event.robotId,
+                signal_id: `${event.eventId}-CLS`,
+                client_order_id: closeClientOrderId,
+                action: closeAction,
+                symbol: event.executionSymbol,
+                order_type: 'MARKET',
+                quantity: existingPos.quantity,
+                price: event.entryReferencePrice,
+                leverage: existingPos.leverage,
+                status: 'FILLED'
+              }).select('id').single();
+
+              if (closeIntentData) {
+                  await supabase.from('active_orders').insert({
+                    intent_id: closeIntentData.id,
+                    robot_id: event.robotId,
+                    binance_order_id: `MOCK-BINANCE-${closeClientOrderId}`,
+                    client_order_id: closeClientOrderId,
+                    symbol: event.executionSymbol,
+                    side: existingPos.side === 'LONG' ? 'SELL' : 'BUY',
+                    order_type: 'MARKET',
+                    quantity: existingPos.quantity,
+                    price: event.entryReferencePrice,
+                    filled_quantity: existingPos.quantity,
+                    average_fill_price: event.entryReferencePrice,
+                    status: 'FILLED',
+                    role: 'TAKER'
+                  });
+              }
+
+              const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (event.entryReferencePrice - existingPos.entry_price) * existingPos.quantity;
+              const ctx = existingPos.context_snapshot || {};
+              const { error: thErr } = await supabase.from('trade_history').insert({
+                  robot_id: event.robotId,
+                  side: existingPos.side,
+                  size: existingPos.quantity,
+                  entry_price: existingPos.entry_price,
+                  exit_price: event.entryReferencePrice,
+                  realized_pnl: pnl,
+                  fee: 0,
+                  slippage: 0,
+                  duration_seconds: 0,
+                  close_reason: (event as any).closeReason || 'STOP_LOSS',
+                  symbol: existingPos.symbol,
+                  correlation_id: existingPos.correlation_id
+              });
+              if (thErr) console.error('[PaperExecutionEngine] STOP/CLOSE trade_history insert failed:', thErr);
+
+              await supabase.from('active_positions').delete().eq('id', existingPos.id);
+              if (closeIntentData) {
+                  await supabase.from('active_orders').delete().eq('intent_id', closeIntentData.id);
+                  await supabase.from('execution_intents').delete().eq('id', closeIntentData.id);
+              }
+              console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${event.trace.correlationId} position closed`);
+          }
+          return;
       }
 
       const side = event.direction === 'LONG' ? 'BUY' : 'SELL';
@@ -105,24 +172,20 @@ export class PaperExecutionEngine implements IEngine {
           // 3. Move active_position to trade_history
           const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (event.entryReferencePrice - existingPos.entry_price) * existingPos.quantity;
           const ctx = existingPos.context_snapshot || {};
-          const { error: histErr } = await supabase.from('trade_history').insert({
-              robot_id: event.robotId,
-              action: existingPos.side === 'LONG' ? 'SELL' : 'BUY',
-              side: existingPos.side,
-              amount: existingPos.quantity,
-              entry_price: existingPos.entry_price,
-              exit_price: event.entryReferencePrice,
-              pnl: pnl,
-              fee: 0,
-              slippage: 0,
-              reason: 'REVERSAL',
-              correlation_id: existingPos.correlation_id, // Keep original ID
-              execution_symbol: existingPos.symbol,
-              trading_view_symbol: ctx.tradingViewSymbol || event.tradingViewSymbol,
-              timeframe: ctx.timeframe || event.timeframe,
-              strategy_id: ctx.strategyId || event.strategyId,
-              indicator_snapshot: ctx.indicatorSnapshot || {}
-          });
+            const { error: histErr } = await supabase.from('trade_history').insert({
+                robot_id: event.robotId,
+                side: existingPos.side,
+                size: existingPos.quantity,
+                entry_price: existingPos.entry_price,
+                exit_price: event.entryReferencePrice,
+                realized_pnl: pnl,
+                fee: 0,
+                slippage: 0,
+                duration_seconds: 0,
+                close_reason: 'REVERSAL',
+                symbol: existingPos.symbol,
+                correlation_id: existingPos.correlation_id
+            });
           if (histErr) console.error('[PaperExecutionEngine] REVERSAL trade_history insert failed:', histErr);
 
           // 4. Delete active_position and close intent/order (Cleanup LIVE records)

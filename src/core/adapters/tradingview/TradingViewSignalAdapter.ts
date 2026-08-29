@@ -1,7 +1,8 @@
-﻿import { randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import { EventFactory } from '../../infrastructure/EventFactory';
 import { getSupabaseAdmin } from '../../../lib/supabase';
 import { SequenceAuthority } from '../../infrastructure/SequenceAuthority';
+import { SetupManager } from '../../engine/runtime/SetupManager';
 
 export interface SignalWebhookPayload {
     signalId?: string;
@@ -18,6 +19,11 @@ export interface SignalWebhookPayload {
     };
     isTest?: boolean;
     testId?: string;
+    event?: 'PENDING' | 'ARM' | 'FIRE' | 'CANCEL' | 'STOP';
+    trigger?: number;
+    stop?: number;
+    setup_id?: string;
+    eventTimestamp?: number;
 }
 
 export interface AdapterResult {
@@ -96,62 +102,95 @@ export class TradingViewSignalAdapter {
             return { accepted: false, validationErrors };
         }
 
-        // CALCULATE RETRACEMENT ZONE
-        let entryTrigger;
-        if (payload.direction === 'LONG') {
-            const distance = Math.abs(payload.bands.B4 - payload.bands.B3);
-            const zoneValue = distance * (expectedRetracementZonePercent / 100);
-            entryTrigger = {
-                type: 'RETRACEMENT_ZONE',
-                lower: payload.bands.B4 - zoneValue,
-                upper: payload.bands.B4
-            };
-        } else if (payload.direction === 'SHORT') {
-            const distance = Math.abs(payload.bands.B3 - payload.bands.B2);
-            const zoneValue = distance * (expectedRetracementZonePercent / 100);
-            entryTrigger = {
-                type: 'RETRACEMENT_ZONE',
-                lower: payload.bands.B2,
-                upper: payload.bands.B2 + zoneValue
-            };
+        const tvEvent = payload.event || 'PENDING';
+        const setup_id = payload.setup_id || ('tv_' + payload.barTimestamp);
+        
+        const setupPayload = {
+            setup_id,
+            event: tvEvent,
+            direction: payload.direction,
+            trigger: payload.trigger,
+            stop: payload.stop,
+            eventTimestamp: payload.eventTimestamp || Date.now(),
+            snapshot: {
+                line1: payload.bands.B1,
+                line2: payload.bands.B2,
+                line3: payload.bands.B3,
+                line4: payload.bands.B4,
+                line5: payload.bands.B5
+            }
+        };
+
+        const setupResult = await SetupManager.handleSetupEvent(robotId, setupPayload);
+        
+        if (!setupResult.success) {
+            console.error('[TradingViewSignalAdapter] SetupManager rejected:', setupResult.error);
+            return { accepted: false, validationErrors: [setupResult.error || 'SETUP_REJECTED'] };
         }
 
-        let seq = SequenceAuthority.next(robotId);
-        const trace = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewSignalAdapter', seq);
+        const events = [];
 
-        // CREATE STRATEGY_SIGNAL_EVENT directly
-        const signalEvent = EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, activeVersion, trace, {
-            strategyId: 'TV_SIGNAL',
-            direction: payload.direction,
-            entryTrigger,
-            maxTimeoutCandles: expectedMaxTimeoutCandles,
-            barTimestamp: payload.barTimestamp,
-            indicatorReference: {
-                snapshot: {
-                    line1: payload.bands.B1,
-                    line2: payload.bands.B2,
-                    line3: payload.bands.B3,
-                    line4: payload.bands.B4,
-                    line5: payload.bands.B5
-                },
-                source: 'TRADING_VIEW_WEBHOOK'
-            }
-        });
-
-        console.log(`[TradingViewSignalAdapter] Validation PASS. Generated STRATEGY_SIGNAL_EVENT for ${robotId}.`);
+        if (tvEvent === 'FIRE') {
+            let seq = SequenceAuthority.next(robotId);
+            const trace = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewSignalAdapter', seq);
+            const tradePlan = EventFactory.createEvent('TRADE_PLAN_EVENT', robotId, activeVersion, trace, {
+                strategyId: 'TV_SIGNAL',
+                strategyVersion: 1,
+                tradingViewSymbol: payload.symbol,
+                executionSymbol: expectedCanonicalSymbol, 
+                direction: payload.direction,
+                signalId: setup_id,
+                entryTrigger: payload.trigger,
+                stopLoss: payload.stop,
+                takeProfit: null,
+                positionAllocationPercent: 10,
+                positionSize: 0.1,
+                leverage: 1,
+                entryReferencePrice: payload.trigger
+            });
+            events.push({
+                eventType: 'TRADE_PLAN_EVENT',
+                eventId: tradePlan.eventId,
+                sequence: tradePlan.trace.sequence,
+                eventInstance: tradePlan
+            });
+            console.log(`[TradingViewSignalAdapter] Validation PASS. Generated TRADE_PLAN_EVENT for ${robotId}.`);
+        } else if (tvEvent === 'STOP' || tvEvent === 'CANCEL') {
+            let seq = SequenceAuthority.next(robotId);
+            const trace = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewSignalAdapter', seq);
+            const tradePlanClose = EventFactory.createEvent('TRADE_PLAN_EVENT', robotId, activeVersion, trace, {
+                action: 'CLOSE',
+                strategyId: 'TV_SIGNAL',
+                strategyVersion: 1,
+                tradingViewSymbol: payload.symbol,
+                executionSymbol: expectedCanonicalSymbol, 
+                direction: payload.direction,
+                signalId: setup_id,
+                entryTrigger: payload.stop,
+                stopLoss: null,
+                takeProfit: null,
+                positionAllocationPercent: 10,
+                positionSize: 0.1,
+                leverage: 1,
+                entryReferencePrice: payload.stop || 0,
+                closeReason: tvEvent === 'STOP' ? 'STOP_LOSS' : 'CANCELLED'
+            } as any);
+            events.push({
+                eventType: 'TRADE_PLAN_EVENT',
+                eventId: tradePlanClose.eventId,
+                sequence: tradePlanClose.trace.sequence,
+                eventInstance: tradePlanClose
+            });
+            console.log(`[TradingViewSignalAdapter] Validation PASS. Generated TRADE_PLAN_EVENT (CLOSE) for ${robotId}.`);
+        } else {
+            console.log(`[TradingViewSignalAdapter] Validation PASS. State updated via SetupManager (${tvEvent}) for ${robotId}. No execution event emitted.`);
+        }
 
         return {
             accepted: true,
             validationErrors: [],
             correlationId,
-            events: [
-                {
-                    eventType: 'STRATEGY_SIGNAL_EVENT',
-                    eventId: signalEvent.eventId,
-                    sequence: signalEvent.trace.sequence,
-                    eventInstance: signalEvent
-                }
-            ]
+            events
         };
     }
 }
