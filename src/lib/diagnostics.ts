@@ -20,6 +20,7 @@ export interface SignalTraceUpdate {
     adapter_status?: string;
     strategy_status?: string;
     strategy_result?: string;
+    error_reason?: string;
     diagnostics?: any;
 }
 
