@@ -28,7 +28,7 @@ export class CommandPoller {
             // Find one PENDING command
             const { data: commands, error } = await this.supabase
                 .from('robot_commands')
-                .select('*')
+                .select('command_id, robot_id, command_type, created_at')
                 .eq('status', 'RECEIVED')
                 .order('created_at', { ascending: true })
                 .limit(1);
@@ -36,41 +36,49 @@ export class CommandPoller {
             if (error) {
                 console.error('[CommandPoller] Polling error:', error);
             } else if (commands && commands.length > 0) {
-                const cmd = commands[0];
+                const cmdStub = commands[0];
                 
-                console.log(JSON.stringify({
-                    event: 'COMMAND_POLLER_FOUND',
-                    command_id: cmd.command_id,
-                    correlation_id: cmd.correlation_id,
-                    robot_id: cmd.robot_id,
-                    barTimestamp: cmd.result?.barTimestamp || 'unknown'
-                }));
-                
-                if (cmd.command_type === 'TV_SIGNAL' && cmd.result?.barTimestamp) {
-                    upsertSignalTrace({
-                        robot_id: cmd.robot_id,
-                        bar_timestamp: Number(cmd.result.barTimestamp),
-                        poller_status: 'GREEN'
-                    });
-                }
-
-                // Optimistic lock: update to PROCESSING
-                const { data: updated, error: lockErr } = await this.supabase
+                // Optimistic lock: update to PROCESSING without selecting the full row back
+                const { error: lockErr } = await this.supabase
                     .from('robot_commands')
                     .update({ status: 'PROCESSING', processed_at: new Date().toISOString() })
-                    .eq('command_id', cmd.command_id)
-                    .eq('status', 'RECEIVED')
-                    .select()
-                    .single();
+                    .eq('command_id', cmdStub.command_id)
+                    .eq('status', 'RECEIVED');
 
-                if (!lockErr && updated) {
-                    console.log(JSON.stringify({
-                        event: 'COMMAND_POLLER_PROCESSING',
-                        command_id: updated.command_id,
-                        correlation_id: updated.correlation_id,
-                        barTimestamp: updated.result?.barTimestamp || 'unknown'
-                    }));
-                    await this.processCommand(updated);
+                if (!lockErr) {
+                    // Fetch the full command including the payload
+                    const { data: fullCmd, error: fetchErr } = await this.supabase
+                        .from('robot_commands')
+                        .select('command_id, robot_id, command_type, result, correlation_id, created_at')
+                        .eq('command_id', cmdStub.command_id)
+                        .single();
+                        
+                    if (!fetchErr && fullCmd) {
+                        console.log(JSON.stringify({
+                            event: 'COMMAND_POLLER_FOUND',
+                            command_id: fullCmd.command_id,
+                            correlation_id: fullCmd.correlation_id,
+                            robot_id: fullCmd.robot_id,
+                            barTimestamp: fullCmd.result?.barTimestamp || 'unknown'
+                        }));
+                        
+                        if (fullCmd.command_type === 'TV_SIGNAL' && fullCmd.result?.barTimestamp) {
+                            upsertSignalTrace({
+                                robot_id: fullCmd.robot_id,
+                                bar_timestamp: Number(fullCmd.result.barTimestamp),
+                                poller_status: 'GREEN'
+                            });
+                        }
+
+                        console.log(JSON.stringify({
+                            event: 'COMMAND_POLLER_PROCESSING',
+                            command_id: fullCmd.command_id,
+                            correlation_id: fullCmd.correlation_id,
+                            barTimestamp: fullCmd.result?.barTimestamp || 'unknown'
+                        }));
+                        
+                        await this.processCommand(fullCmd);
+                    }
                 }
             }
         } catch (err) {

@@ -54,10 +54,10 @@ export default function SimulatorPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'active_positions', filter: `robot_id=eq.${robot.id}` }, () => {
         fetchPosition(robot.id);
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'robots', filter: `id=eq.${robot.id}` }, () => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'robots', filter: `id=eq.${robot.id}` }, () => {
         fetchRobot(userId!, startingBalanceInput, true);
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'trade_history', filter: `robot_id=eq.${robot.id}` }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trade_history', filter: `robot_id=eq.${robot.id}` }, () => {
         fetchTrades(robot.id);
       })
       .subscribe();
@@ -80,7 +80,7 @@ export default function SimulatorPage() {
         setTimeframe(r.timeframe);
 
         // Fetch config
-        const { data: c } = await supabase.from('robot_configs').select('*').eq('robot_id', r.id).eq('status', 'ACTIVE').single();
+        const { data: c } = await supabase.from('robot_configs').select('indicator_profile').eq('robot_id', r.id).eq('status', 'ACTIVE').single();
         if (c && c.indicator_profile) {
           setBbLength(c.indicator_profile.length || 20);
           setBbSource(c.indicator_profile.source || 'close');
@@ -97,12 +97,12 @@ export default function SimulatorPage() {
   };
 
   const fetchPosition = async (rid: string) => {
-    const { data } = await supabase.from('active_positions').select('*').eq('robot_id', rid).single();
+    const { data } = await supabase.from('active_positions').select('id, robot_id, symbol, side, entry_price, quantity, stop_loss_price, take_profit_price, context_snapshot').eq('robot_id', rid).single();
     setPosition(data || null);
   };
 
   const fetchTrades = async (rid: string) => {
-    const { data } = await supabase.from('trade_history').select('*').eq('robot_id', rid).order('created_at', { ascending: false });
+    const { data } = await supabase.from('trade_history').select('id, execution_symbol, side, pnl, indicator_snapshot, created_at').eq('robot_id', rid).order('created_at', { ascending: false }).limit(50);
     setTrades(data || []);
   };
 

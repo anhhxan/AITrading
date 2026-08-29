@@ -25,9 +25,8 @@ export class RobotRuntime {
         const { data: configData, error: configErr } = await supabase
             .from('robot_configs')
             .select(`
-                *,
-                robots (*),
-                risk_profile:risk_profiles (*)
+                risk_profile,
+                robots (current_state, timeframe, trading_view_symbol, execution_symbol, paper_balance)
             `)
             .eq('robot_id', this.robotId)
             .eq('status', 'ACTIVE')
@@ -41,7 +40,7 @@ export class RobotRuntime {
         // Hydration: Source of Truth is now active_setups (Phase 3.7)
         const { data: activeSetup, error: setupErr } = await supabase
             .from('active_setups')
-            .select('*')
+            .select('setup_id, state, direction, trigger_price, stop_price, snapshot')
             .eq('robot_id', this.robotId)
             .single(); // Assuming one active setup per robot
 
@@ -77,10 +76,10 @@ export class RobotRuntime {
             timeframe: configData.robots.timeframe,
             accountBalance: configData.robots.paper_balance,
             positionAllocationPercent: positionAllocationPercent,
-            leverage: configData.robots.leverage || 1
+            leverage: configData.risk_profile?.leverage || 1
         });
 
-        const { data: pos } = await supabase.from('active_positions').select('*').eq('robot_id', this.robotId).single();
+        const { data: pos } = await supabase.from('active_positions').select('context_snapshot').eq('robot_id', this.robotId).single();
         if (pos && pos.context_snapshot) {
             (this.positionTracker as any).positionContexts.set(this.robotId, pos.context_snapshot);
         }

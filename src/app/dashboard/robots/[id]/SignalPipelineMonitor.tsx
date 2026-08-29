@@ -278,8 +278,25 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
         fetchData();
         
         const subCore = supabase.channel('core_events_ch')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'core_events', filter: `robot_id=eq.${robotId}` }, () => {
-                fetchData();
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'core_events', filter: `robot_id=eq.${robotId}` }, (payload) => {
+                const newEvent = payload.new as any;
+                setGoldenTraces(prev => {
+                    const cid = newEvent.payload?.trace?.correlationId;
+                    if (!cid) return prev;
+                    
+                    const newTraces = [...prev];
+                    const existingGroup = newTraces.find(t => t.signal?.payload?.trace?.correlationId === cid);
+                    
+                    if (existingGroup) {
+                        if (!existingGroup.events.some((e:any) => e.id === newEvent.id)) {
+                            existingGroup.events.push(newEvent);
+                        }
+                    } else if (newEvent.event_type === 'STRATEGY_SIGNAL_EVENT') {
+                        newTraces.unshift({ signal: newEvent, events: [newEvent] });
+                        if (newTraces.length > 10) newTraces.pop();
+                    }
+                    return newTraces;
+                });
             })
             .subscribe();
 

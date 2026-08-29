@@ -27,22 +27,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     
     let payload;
     let rawPayloadStr = '';
-    let barTimestamp = 'unknown';
-    let timeframe = 'unknown';
-    let tvSymbol = 'unknown';
+    let eventTimestamp = 'unknown';
+    let setupId = 'unknown';
+    let tvEvent = 'unknown';
 
     try {
         rawPayloadStr = await req.text();
         payload = JSON.parse(rawPayloadStr);
 
-        if (payload.barTimestamp) {
-            barTimestamp = String(payload.barTimestamp);
-            const ts = Number(payload.barTimestamp);
-            if (!Number.isFinite(ts)) throw new Error("INVALID_BAR_TIMESTAMP");
-            payload.barTimestamp = ts;
+        if (payload.eventTimestamp) {
+            eventTimestamp = String(payload.eventTimestamp);
+            const ts = Number(payload.eventTimestamp);
+            if (!Number.isFinite(ts)) throw new Error("INVALID_EVENT_TIMESTAMP");
+            payload.eventTimestamp = ts;
         }
-        if (payload.timeframe) timeframe = String(payload.timeframe);
-        if (payload.tvSymbol || payload.symbol) tvSymbol = String(payload.tvSymbol || payload.symbol);
+        if (payload.setup_id) setupId = String(payload.setup_id);
+        if (payload.event) tvEvent = String(payload.event);
     } catch(e) {
         // Will reject below
     }
@@ -51,19 +51,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         event: 'VERCEL_RECEIVED',
         request_id,
         robot_id: robotId,
-        barTimestamp,
-        timeframe,
-        tvSymbol,
+        eventTimestamp,
+        setupId,
+        tvEvent,
         received_at: new Date(vercel_received_at).toISOString()
     }));
     
-    // Best effort diagnostic: Initial Received (Also assumes CF received & forwarded if it has x-cf-request-id)
-    if (barTimestamp !== 'unknown') {
+    // Best effort diagnostic: Initial Received
+    if (eventTimestamp !== 'unknown') {
         upsertSignalTrace({
             robot_id: robotId,
-            bar_timestamp: Number(barTimestamp),
-            timeframe,
-            tv_symbol: tvSymbol,
+            bar_timestamp: Number(eventTimestamp), // mapped to bar_timestamp for legacy diagnostics
+            timeframe: 'unknown',
+            tv_symbol: 'unknown',
             request_id,
             cf_status: req.headers.get('x-cf-request-id') ? 'GREEN' : 'UNKNOWN',
             vercel_status: 'GREEN'
@@ -95,58 +95,50 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     }));
 
     if (!auth_valid) {
-        if (barTimestamp !== 'unknown') upsertSignalTrace({ robot_id: robotId, bar_timestamp: Number(barTimestamp), vercel_status: 'RED' });
+        if (eventTimestamp !== 'unknown') upsertSignalTrace({ robot_id: robotId, bar_timestamp: Number(eventTimestamp), vercel_status: 'RED' });
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
     console.log(JSON.stringify({
-        event: 'VERCEL_TIMESTAMP_CHECK',
+        event: 'VERCEL_PAYLOAD_VALIDATION',
         request_id,
-        barTimestamp,
-        valid: typeof payload.barTimestamp === 'number'
+        eventTimestamp,
+        valid: typeof payload.eventTimestamp === 'number' && typeof payload.setup_id === 'string'
     }));
 
+    // Ensure robot exists and has ACTIVE config, and fetch current state (IDLE, RUNNING, etc)
     const supabase = getSupabaseAdmin();
-
-    // Verify robot exists and is RUNNING
     const { data: robot, error: robotError } = await supabase
         .from('robots')
-        .select('id, status, trading_mode, trading_account_id')
+        .select('id, current_state')
         .eq('id', robotId)
+        .eq('is_archived', false)
         .single();
-        
-    console.log(JSON.stringify({
-        event: 'VERCEL_ROBOT_CHECK',
-        request_id,
-        robot_id: robotId,
-        robot_exists: !!robot && !robotError,
-        robot_status: robot?.status || 'UNKNOWN',
-        trading_enabled: true // Always true for now unless we need to check another field
-    }));
 
     if (robotError || !robot) {
-        return NextResponse.json({ error: 'ROBOT_NOT_FOUND' }, { status: 404 });
+        if (eventTimestamp !== 'unknown') upsertSignalTrace({ 
+            robot_id: robotId, 
+            bar_timestamp: Number(eventTimestamp), 
+            db_status: 'RED',
+            error_reason: 'ROBOT_NOT_FOUND'
+        });
+        return NextResponse.json({ error: 'Robot not found' }, { status: 404 });
     }
 
-    if (robot.status !== 'RUNNING') {
-        return NextResponse.json({ error: 'ROBOT_NOT_RUNNING' }, { status: 400 });
-    }
-
-    if (robot.trading_mode === 'LIVE' && !robot.trading_account_id) {
-        return NextResponse.json({ error: 'LIVE_MODE_REQUIRES_TRADING_ACCOUNT' }, { status: 400 });
-    }
-
-    // Deterministic Idempotency Check
-    // NEW SIGNAL IDENTITY RULE: robot_id + barTimestamp + direction
+    // NEW SIGNAL IDENTITY RULE: robot_id + setup_id + event
     let identityString = payloadStr;
-    if (payload.direction && payload.barTimestamp) {
-        identityString = `${robotId}_${payload.barTimestamp}_${payload.direction}`;
+    if (payload.setup_id && payload.event) {
+        identityString = `${robotId}_${payload.setup_id}_${payload.event}`;
     }
     
     const hash = crypto.createHash('md5').update(identityString).digest('hex');
     const deterministicCommandId = `${hash.slice(0,8)}-${hash.slice(8,12)}-4${hash.slice(13,16)}-a${hash.slice(17,20)}-${hash.slice(20,32)}`;
-    const hash_prefix = hash.slice(0, 10);
-    const correlation_id = `tv_${hash_prefix}_${Date.now()}`;
+    
+    // Idempotency: NO Date.now(). Must be deterministic.
+    const correlation_id = `tv_${hash.slice(0, 16)}`;
+
+    // Ensure backwards compatibility with old logging for now
+    let hash_prefix = hash.slice(0, 10);
 
     // Insert command as PENDING so Worker can pick it up
     const { error: cmdError } = await supabase.from('robot_commands').insert({
@@ -165,21 +157,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         duplicate: cmdError && cmdError.code === '23505'
     }));
 
-    if (cmdError && cmdError.code === '23505') {
-        return NextResponse.json({ status: 'OK', message: 'Duplicate acknowledged' }, { status: 200 });
-    }
-
     if (cmdError) {
-        console.log(JSON.stringify({
-            event: 'VERCEL_DB_ERROR',
-            request_id,
-            safe_error_code: cmdError.code || 'UNKNOWN',
-            safe_error_message: cmdError.message || 'Unknown database error'
-        }));
+        if (cmdError.code === '23505') {
+            return NextResponse.json({ message: 'Duplicate signal ignored' }, { status: 200 });
+        }
         
-        upsertSignalTrace({ 
+        console.error('Failed to insert command:', cmdError);
+        
+        if (eventTimestamp !== 'unknown') upsertSignalTrace({ 
             robot_id: robotId, 
-            bar_timestamp: Number(barTimestamp), 
+            bar_timestamp: Number(eventTimestamp), 
             db_status: 'RED',
             command_id: deterministicCommandId,
             correlation_id
@@ -188,18 +175,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 
-    console.log(JSON.stringify({
-        event: 'VERCEL_DB_INSERT',
-        request_id,
-        command_id: deterministicCommandId,
-        correlation_id,
-        barTimestamp,
-        db_insert_success: true
-    }));
-
-    upsertSignalTrace({ 
+    if (eventTimestamp !== 'unknown') upsertSignalTrace({ 
         robot_id: robotId, 
-        bar_timestamp: Number(barTimestamp), 
+        bar_timestamp: Number(eventTimestamp), 
         db_status: 'GREEN',
         command_id: deterministicCommandId,
         correlation_id

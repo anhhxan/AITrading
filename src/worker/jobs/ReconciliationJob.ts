@@ -35,7 +35,7 @@ export class ReconciliationJob {
             // Chỉ xem xét những order có trạng thái ngưng đọng (không còn chạy)
             const { data: deadOrders, error: orderErr } = await supabase
                 .from('active_orders')
-                .select('*')
+                .select('id, robot_id, setup_id, status')
                 .in('status', ['FILLED', 'CANCELED', 'REJECTED', 'EXPIRED'])
                 .order('created_at', { ascending: false })
                 .limit(1000);
@@ -64,7 +64,7 @@ export class ReconciliationJob {
             // 2. Quét execution_intents
             const { data: deadIntents, error: intentErr } = await supabase
                 .from('execution_intents')
-                .select('*')
+                .select('id, robot_id, setup_id, status')
                 .in('status', ['FILLED', 'CANCELED', 'REJECTED', 'EXPIRED'])
                 .order('created_at', { ascending: false })
                 .limit(1000);
@@ -100,7 +100,7 @@ export class ReconciliationJob {
      * Xác minh FAIL-SAFE: Chỉ trả về true nếu chắc chắn 100% record này là rác.
      */
     private static async verifySafeToDelete(supabase: any, robotId: string, setupId: string | null, status: string): Promise<boolean> {
-        if (!setupId) return true; // Không có setup_id -> Chắc chắn là rác dị thường, xóa luôn
+        if (!setupId) return false; // Không xác minh được là DEAD -> KHÔNG XÓA. Dữ liệu legacy để riêng.
 
         if (status === 'CANCELED' || status === 'REJECTED' || status === 'EXPIRED') {
             // Lệnh bị hủy/từ chối không sinh position. An toàn để xóa ngay.

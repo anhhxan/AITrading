@@ -1,5 +1,5 @@
 //@version=5
-indicator("BB + MB DATA BRIDGE - Phase 3.5 Strict Final v3", overlay=true)
+indicator("BB + MB DATA BRIDGE - Phase 3.7 Intrabar Strict", overlay=true)
 
 // =====================================================================
 // 1. CẤU HÌNH BANDS & INDICATORS
@@ -25,96 +25,175 @@ plot(B4, color=color.blue, title="B4")
 plot(B5, color=color.green, title="B5")
 
 // =====================================================================
-// 2. STATE MACHINE (IDLE -> ARM -> FIRE/CANCEL)
+// 2. STATE MACHINE (VARIP BẮT BUỘC)
 // =====================================================================
 varip string state = "IDLE"
+varip string display_state = "IDLE"
+varip color display_color = color.gray
+
+varip string setup_id = ""
 varip float s_B1 = na
 varip float s_B2 = na
 varip float s_B3 = na
 varip float s_B4 = na
 varip float s_B5 = na
 varip float s_Trigger = na
+varip float s_Stop = na
+
+varip bool sendWebhookFlag = false
+varip string webhookEvent = ""
 
 // =====================================================================
-// 3. ĐIỀU KIỆN ARM (Chỉ đánh giá khi nến trước vừa đóng)
+// 3. LOGIC XUẤT HIỆN NẾN B (OPEN) & SETUP NẾN A
 // =====================================================================
-if barstate.isnew and state == "IDLE"
-    if close[1] >= B5[1] and close[1] <= B4[1]
-        state := "ARM_LONG"
-        s_B1 := B1[1], s_B2 := B2[1], s_B3 := B3[1], s_B4 := B4[1], s_B5 := B5[1]
-        s_Trigger := s_B4 + (s_B3 - s_B4) * 0.10
-    else if close[1] >= B2[1] and close[1] <= B1[1]
-        state := "ARM_SHORT"
-        s_B1 := B1[1], s_B2 := B2[1], s_B3 := B3[1], s_B4 := B4[1], s_B5 := B5[1]
-        s_Trigger := s_B2 - (s_B2 - s_B3) * 0.10
+if barstate.isnew
+    if state == "IDLE"
+        // 3.1. LONG SETUP
+        if close[1] >= B5[1] and close[1] <= B4[1]
+            // Nến A hợp lệ -> Tạm coi là PENDING LONG -> Lấy Snapshot
+            setup_id := str.tostring(time[1]) + "_" + syminfo.ticker
+            s_B1 := B1[1], s_B2 := B2[1], s_B3 := B3[1], s_B4 := B4[1], s_B5 := B5[1]
+            s_Trigger := s_B4 + (s_B3 - s_B4) * 0.10
+            s_Stop := s_B4 - (s_B4 - s_B5) * 0.20
+            
+            // NGAY TẠI ĐÂY: Đánh giá Open của Nến B
+            if open >= s_B4 and open <= s_B3
+                state := "ARM_LONG"
+                display_state := "🟢 ARM LONG"
+                display_color := color.green
+                sendWebhookFlag := true, webhookEvent := "ARM"
+            else
+                // Open nằm ngoài vùng -> HỦY TOÀN TẬP
+                state := "IDLE"
+                display_state := "🔴 LONG HỦY (Open ngoài vùng)"
+                display_color := color.gray
+                sendWebhookFlag := true, webhookEvent := "CANCEL"
+                
+        // 3.2. SHORT SETUP
+        else if close[1] >= B2[1] and close[1] <= B1[1]
+            setup_id := str.tostring(time[1]) + "_" + syminfo.ticker
+            s_B1 := B1[1], s_B2 := B2[1], s_B3 := B3[1], s_B4 := B4[1], s_B5 := B5[1]
+            s_Trigger := s_B2 - (s_B2 - s_B3) * 0.10
+            s_Stop := s_B2 + (s_B1 - s_B2) * 0.20
+            
+            if open >= s_B3 and open <= s_B2
+                state := "ARM_SHORT"
+                display_state := "🔴 ARM SHORT"
+                display_color := color.red
+                sendWebhookFlag := true, webhookEvent := "ARM"
+            else
+                state := "IDLE"
+                display_state := "🟢 SHORT HỦY (Open ngoài vùng)"
+                display_color := color.gray
+                sendWebhookFlag := true, webhookEvent := "CANCEL"
 
 // =====================================================================
 // 4. KIỂM TRA REALTIME INTRABAR (Đánh giá từng Tick)
 // =====================================================================
-bool isFireLongTick = false
-bool isFireShortTick = false
-varip bool labelLongThisBar = false
-varip bool labelShortThisBar = false
-
-if barstate.isnew
-    labelLongThisBar := false
-    labelShortThisBar := false
-
-bool longHit    = (close <= s_Trigger)
-bool shortHit   = (close >= s_Trigger)
-bool longCancel = (close > s_B3)
-bool shortCancel= (close < s_B3)
+// Lưu ý: Do code chạy từ trên xuống, nếu Tick đầu tiên của Nến B vừa được ARM ở trên
+// và giá Close (Tick hiện tại) chạm Trigger, nó sẽ ăn lệnh FIRE ngay lập tức!
 
 if state == "ARM_LONG"
-    if longHit
-        isFireLongTick := true
-        labelLongThisBar := true
+    if close > s_B3
         state := "IDLE"
-    else if longCancel
-        state := "IDLE"
+        display_state := "🔴 LONG HỦY (> B3)"
+        display_color := color.gray
+        sendWebhookFlag := true, webhookEvent := "CANCEL"
+    else if close <= s_Trigger
+        state := "LONG_ACTIVE"
+        display_state := "▲ LONG ĐÃ VÀO"
+        display_color := color.lime
+        sendWebhookFlag := true, webhookEvent := "FIRE"
+        
+        // Chống lọt tick: Nếu tick này xuyên quá mạnh chạm luôn Stop
+        if close <= s_Stop
+            state := "IDLE"
+            display_state := "✖ LONG STOP"
+            display_color := color.red
+            sendWebhookFlag := true, webhookEvent := "STOP"
 
-else if state == "ARM_SHORT"
-    if shortHit
-        isFireShortTick := true
-        labelShortThisBar := true
+else if state == "LONG_ACTIVE"
+    if close <= s_Stop
         state := "IDLE"
-    else if shortCancel
+        display_state := "✖ LONG STOP"
+        display_color := color.red
+        sendWebhookFlag := true, webhookEvent := "STOP"
+
+
+if state == "ARM_SHORT"
+    if close < s_B3
         state := "IDLE"
+        display_state := "🟢 SHORT HỦY (< B3)"
+        display_color := color.gray
+        sendWebhookFlag := true, webhookEvent := "CANCEL"
+    else if close >= s_Trigger
+        state := "SHORT_ACTIVE"
+        display_state := "▼ SHORT ĐÃ VÀO"
+        display_color := color.orange
+        sendWebhookFlag := true, webhookEvent := "FIRE"
+        
+        if close >= s_Stop
+            state := "IDLE"
+            display_state := "✖ SHORT STOP"
+            display_color := color.red
+            sendWebhookFlag := true, webhookEvent := "STOP"
+            
+else if state == "SHORT_ACTIVE"
+    if close >= s_Stop
+        state := "IDLE"
+        display_state := "✖ SHORT STOP"
+        display_color := color.red
+        sendWebhookFlag := true, webhookEvent := "STOP"
+
 
 // =====================================================================
-// 5. BẮN WEBHOOK INTRABAR
+// 5. BẮN WEBHOOK VÀ MARKER (GỌI DUY NHẤT 1 LẦN KHI ĐỔI STATE)
 // =====================================================================
-if isFireLongTick or isFireShortTick
-    string direction = isFireLongTick ? "LONG" : "SHORT"
+if sendWebhookFlag
+    string direction = str.contains(state, "SHORT") or display_state == "🟢 SHORT HỦY (Open ngoài vùng)" or display_state == "🟢 SHORT HỦY (< B3)" or display_state == "✖ SHORT STOP" ? "SHORT" : "LONG"
+    
+    // Gửi tín hiệu sang Backend
     string jsonStr = '{"secret":"6b836317269f4c43b2c4ff21004abbad",' +
+                     '"setup_id":"' + setup_id + '",' +
                      '"direction":"' + direction + '",' +
+                     '"state":"' + state + '",' +
                      '"symbol":"' + syminfo.ticker + '",' +
                      '"timeframe":"' + timeframe.period + '",' +
                      '"barTimestamp":' + str.tostring(time) + ',' +
+                     '"eventTimestamp":' + str.tostring(timenow) + ',' +
                      '"bands":{"B1":' + str.tostring(s_B1) + 
                      ',"B2":' + str.tostring(s_B2) + 
                      ',"B3":' + str.tostring(s_B3) + 
                      ',"B4":' + str.tostring(s_B4) + 
-                     ',"B5":' + str.tostring(s_B5) + '}}'
-    alert(jsonStr, alert.freq_once_per_bar)
+                     ',"B5":' + str.tostring(s_B5) + '},' +
+                     '"trigger":' + str.tostring(s_Trigger) + ',' +
+                     '"stop":' + str.tostring(s_Stop) + ',' +
+                     '"event":"' + webhookEvent + '"}'
+    alert(jsonStr, alert.freq_all)
+    
+    // Reset flag để không lặp lại ở tick sau
+    sendWebhookFlag := false
 
 // =====================================================================
-// 6. VISUAL DEBUG TRÊN CHART
+// 6. VISUAL DEBUG TRÊN CHART & LƯU Ý HISTORICAL
 // =====================================================================
-bool showLongTrigger = (state == "ARM_LONG")
-bool showShortTrigger = (state == "ARM_SHORT")
+// [TECHNICAL NOTE] Historical candle chỉ có OHLC, không thể biết thứ tự intrabar chính xác. 
+// Không tuyên bố Zero Repaint tuyệt đối. Realtime execution là nguồn sự thật cho thứ tự Trigger vs Cancel.
 
-plot(showLongTrigger ? s_Trigger : na, color=color.green, style=plot.style_circles, linewidth=1, title="LONG Trigger")
-plot(showShortTrigger ? s_Trigger : na, color=color.red, style=plot.style_circles, linewidth=1, title="SHORT Trigger")
+bool showLongLines = (state == "ARM_LONG" or state == "LONG_ACTIVE")
+bool showShortLines = (state == "ARM_SHORT" or state == "SHORT_ACTIVE")
 
-plotshape(labelLongThisBar, title="LONG FIRED", style=shape.triangleup, location=location.belowbar, color=color.green, text="LONG", textcolor=color.white, size=size.small)
-plotshape(labelShortThisBar, title="SHORT FIRED", style=shape.triangledown, location=location.abovebar, color=color.red, text="SHORT", textcolor=color.white, size=size.small)
+plot(showLongLines ? s_Trigger : na, color=color.green, style=plot.style_circles, linewidth=1, title="LONG Trigger")
+plot(showLongLines ? s_Stop : na, color=color.red, style=plot.style_cross, linewidth=1, title="LONG Stop")
 
-var table debugTable = table.new(position.top_right, 1, 1, bgcolor=color.new(color.black, 50), border_color=color.gray, border_width=1)
+plot(showShortLines ? s_Trigger : na, color=color.red, style=plot.style_circles, linewidth=1, title="SHORT Trigger")
+plot(showShortLines ? s_Stop : na, color=color.green, style=plot.style_cross, linewidth=1, title="SHORT Stop")
+
+var table debugTable = table.new(position.top_right, 2, 8, bgcolor=color.new(color.black, 30), border_color=color.gray, border_width=1)
 if barstate.islast
-    color stateColor = color.gray
-    if state == "ARM_LONG"
-        stateColor := color.green
-    if state == "ARM_SHORT"
-        stateColor := color.red
-    table.cell(debugTable, 0, 0, "STATE: " + state, text_color=color.white, bgcolor=stateColor)
+    table.cell(debugTable, 0, 0, "STATE", text_color=color.white)
+    table.cell(debugTable, 1, 0, display_state, text_color=color.white, bgcolor=display_color)
+    table.cell(debugTable, 0, 1, "Trigger", text_color=color.white)
+    table.cell(debugTable, 1, 1, str.tostring(s_Trigger, "#.##"), text_color=color.white)
+    table.cell(debugTable, 0, 2, "Stop Slot", text_color=color.white)
+    table.cell(debugTable, 1, 2, str.tostring(s_Stop, "#.##"), text_color=color.white)
