@@ -38,11 +38,11 @@ if barstate.isrealtime and barstate.isconfirmed
         '"mult2":' + str.tostring(mult2) + 
       '},' +
       '"plots":{' +
-        '"upper":' + str.tostring(upper) + ',' +      
         '"upper2":' + str.tostring(upper2) + ',' +    
+        '"upper":' + str.tostring(upper) + ',' +      
         '"basis":' + str.tostring(basis) + ',' +      
-        '"lower2":' + str.tostring(lower2) + ',' +    
-        '"lower":' + str.tostring(lower) +            
+        '"lower":' + str.tostring(lower) + ',' +    
+        '"lower2":' + str.tostring(lower2) +
       '}' +
     '}'
 
