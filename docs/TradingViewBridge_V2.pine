@@ -1,0 +1,49 @@
+//@version=5
+indicator("DUMB PINE - State Reporter V2", overlay=true)
+
+length = input.int(20, title="BB Length")
+mult = input.float(2.0, title="BB Mult")
+mult2 = input.float(1.0, title="BB Mult 2")
+src = input.source(close, title="Source")
+
+basis = ta.sma(src, length)
+dev = mult * ta.stdev(src, length)
+dev2 = mult2 * ta.stdev(src, length)
+
+upper2 = basis + dev
+upper = basis + dev2
+lower = basis - dev2
+lower2 = basis - dev
+
+plot(upper2, color=color.red, title="Upper 2 (B1)")
+plot(upper, color=color.orange, title="Upper (B2)")
+plot(basis, color=color.white, title="Basis (B3)")
+plot(lower, color=color.blue, title="Lower (B4)")
+plot(lower2, color=color.green, title="Lower 2 (B5)")
+
+if barstate.isrealtime and barstate.isconfirmed
+    string jsonStr = '{' +
+      '"tvSymbol":"' + syminfo.tickerid + '",' +
+      '"timeframe":"' + timeframe.period + '",' +
+      '"barTimestamp":' + str.tostring(time) + ',' +
+      '"open":' + str.tostring(open) + ',' +
+      '"high":' + str.tostring(high) + ',' +
+      '"low":' + str.tostring(low) + ',' +
+      '"close":' + str.tostring(close) + ',' +
+      '"volume":' + str.tostring(volume) + ',' +
+      '"indicator":{' +
+        '"length":' + str.tostring(length) + ',' +
+        '"source":"close",' +
+        '"mult":' + str.tostring(mult) + ',' +
+        '"mult2":' + str.tostring(mult2) + 
+      '},' +
+      '"plots":{' +
+        '"upper":' + str.tostring(upper) + ',' +      
+        '"upper2":' + str.tostring(upper2) + ',' +    
+        '"basis":' + str.tostring(basis) + ',' +      
+        '"lower2":' + str.tostring(lower2) + ',' +    
+        '"lower":' + str.tostring(lower) +            
+      '}' +
+    '}'
+
+    alert(jsonStr, alert.freq_once_per_bar_close)

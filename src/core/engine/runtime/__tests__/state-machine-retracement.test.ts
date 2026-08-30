@@ -51,7 +51,7 @@ describe('StateMachineEngine - Retracement Limit Fill Phase 14D', () => {
     });
 
     await coreEventBus.publish(signalEvent as any);
-    expect(engine.getState(robotId)).toBe(RobotState.WAIT_RETRACEMENT);
+    expect(engine.getState(robotId)).toBe(RobotState.WAIT_CANDLE_B_CONFIRMATION);
 
     const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', robotId, 1, trace, {
       candle: {

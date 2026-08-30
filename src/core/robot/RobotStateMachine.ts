@@ -5,7 +5,7 @@ import { IIndicator, IStrategy, SignalSide, StrategyContext } from '../interface
 export enum RobotState {
   WAIT_SIGNAL = 'WAIT_SIGNAL',
   SIGNAL_DETECTED = 'SIGNAL_DETECTED',
-  WAIT_RETRACEMENT = 'WAIT_RETRACEMENT',
+  WAIT_CANDLE_B_CONFIRMATION = 'WAIT_CANDLE_B_CONFIRMATION',
   READY_TO_ENTER = 'READY_TO_ENTER',
   POSITION_OPEN = 'POSITION_OPEN',
   WAIT_EXIT = 'WAIT_EXIT',
@@ -50,7 +50,7 @@ export class RobotStateMachine {
         break;
       
       case RobotState.SIGNAL_DETECTED:
-      case RobotState.WAIT_RETRACEMENT:
+      case RobotState.WAIT_CANDLE_B_CONFIRMATION:
         this.evaluateRetracement(candleData, indicatorSnapshot);
         break;
         

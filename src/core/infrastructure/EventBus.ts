@@ -29,7 +29,7 @@ export class EventBus {
 
     // Trả về hàm Unsubscribe
     return () => {
-      const h = this.handlers.get(eventType)!;
+      const h = this.handlers.get(eventType); if (!h) return;
       this.handlers.set(eventType, h.filter(x => x !== handler));
     };
   }
@@ -225,3 +225,4 @@ export class EventBus {
 
 // Singleton instance cho toàn bộ Core Engine
 export const coreEventBus = new EventBus();
+

@@ -99,7 +99,9 @@ export interface IStrategy {
   evaluate(context: StrategyContext): {
     direction: SignalSide;
     maxTimeoutCandles?: number;
+    persistent?: boolean;
     entryTrigger?: { type: string; lower: number; upper: number };
+    cancelTrigger?: { type: string; value: number };
   };
 }
 

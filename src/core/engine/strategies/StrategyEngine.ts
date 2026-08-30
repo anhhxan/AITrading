@@ -180,7 +180,9 @@ export class StrategyEngine implements IEngine {
            barTimestamp: (event as any).barTimestamp,
            direction: signal.direction,
            maxTimeoutCandles: signal.maxTimeoutCandles || 3,
+           persistent: signal.persistent,
            entryTrigger: signal.entryTrigger,
+           cancelTrigger: signal.cancelTrigger,
            strategyId: strategy.name,
            strategyVersion: 'v1.0.0',
            indicatorReference: {

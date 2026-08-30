@@ -42,20 +42,20 @@ describe('Phase 3 Contract: State Machine Rules', () => {
     });
   };
 
-  it('T1: LONG -> WAIT_RETRACEMENT', async () => {
+  it('T1: LONG -> WAIT_CANDLE_B_CONFIRMATION', async () => {
     const signal = createSignal('LONG', 'CORR-100', null, 100);
     await coreEventBus.publish(signal); // Simulate EventBus delivery
     await coreEventBus.waitForIdle('test-robot');
     
-    expect(sm.getState('test-robot')).toBe(RobotState.WAIT_RETRACEMENT);
+    expect(sm.getState('test-robot')).toBe(RobotState.WAIT_CANDLE_B_CONFIRMATION);
   });
 
-  it('T2: SHORT -> WAIT_RETRACEMENT', async () => {
+  it('T2: SHORT -> WAIT_CANDLE_B_CONFIRMATION', async () => {
     const signal = createSignal('SHORT', 'CORR-101', null, 101);
     await coreEventBus.publish(signal);
     await coreEventBus.waitForIdle('test-robot');
     
-    expect(sm.getState('test-robot')).toBe(RobotState.WAIT_RETRACEMENT);
+    expect(sm.getState('test-robot')).toBe(RobotState.WAIT_CANDLE_B_CONFIRMATION);
   });
 
   it('T3: NONE -> no state change', async () => {
@@ -81,14 +81,14 @@ describe('Phase 3 Contract: State Machine Rules', () => {
     await coreEventBus.publish(signal2);
     await coreEventBus.waitForIdle('test-robot');
     
-    expect(sm.getState('test-robot')).toBe(RobotState.WAIT_RETRACEMENT);
+    expect(sm.getState('test-robot')).toBe(RobotState.WAIT_CANDLE_B_CONFIRMATION);
     
     // Verify timeout is reset by sending 3 more candles and checking it doesn't timeout until the 4th
     await coreEventBus.publish(createCandle(103, 50000));
     await coreEventBus.publish(createCandle(104, 50000));
     await coreEventBus.publish(createCandle(105, 50000));
     await coreEventBus.waitForIdle('test-robot');
-    expect(sm.getState('test-robot')).toBe(RobotState.WAIT_RETRACEMENT);
+    expect(sm.getState('test-robot')).toBe(RobotState.WAIT_CANDLE_B_CONFIRMATION);
     
     await coreEventBus.publish(createCandle(106, 50000));
     await coreEventBus.waitForIdle('test-robot');
@@ -110,7 +110,7 @@ describe('Phase 3 Contract: State Machine Rules', () => {
     const event = publishedEvents[0] as StateTransitionEvent;
     
     expect(event.eventType).toBe('STATE_TRANSITION_EVENT');
-    expect(event.previousState).toBe(RobotState.WAIT_RETRACEMENT);
+    expect(event.previousState).toBe(RobotState.WAIT_CANDLE_B_CONFIRMATION);
     expect(event.newState).toBe(RobotState.READY_TO_ENTER);
     expect(event.reason).toBe('TRIGGER_MATCHED');
     

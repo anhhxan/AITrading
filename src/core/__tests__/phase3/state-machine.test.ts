@@ -33,7 +33,7 @@ describe('Phase 3: State Machine Transition', () => {
       direction: 'LONG', maxTimeoutCandles: 2, entryTrigger: { type: 'RETRACEMENT_ZONE', lower: 90, upper: 92 }
     }) as any);
     await coreEventBus.waitForIdle('RobotSM');
-    expect(engine.getState('RobotSM')).toBe(RobotState.WAIT_RETRACEMENT);
+    expect(engine.getState('RobotSM')).toBe(RobotState.WAIT_CANDLE_B_CONFIRMATION);
 
     // Đẩy Indicator (Indicator ko còn được dùng trực tiếp bởi StateMachine nữa, nhưng giữ để khớp Event Pipeline)
     await coreEventBus.publish(EventFactory.createEvent('INDICATOR_UPDATED', 'RobotSM', 1 /* configVersion */, createSeqTrace(), {

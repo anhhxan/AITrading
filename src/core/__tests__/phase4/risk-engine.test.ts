@@ -35,7 +35,7 @@ describe('Phase 4A: Risk Engine (TDD)', () => {
 
   const createReadyToEnter = (triggerPrice: number, seq: number = 23) => {
     return EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, 1 /* configVersion */, EventFactory.createTrace('corr-22', `candle-${seq}`, 'fsm', seq), {
-      previousState: RobotState.WAIT_RETRACEMENT,
+      previousState: RobotState.WAIT_CANDLE_B_CONFIRMATION,
       newState: RobotState.READY_TO_ENTER,
       reason: 'TRIGGER_MATCHED',
       triggerPrice

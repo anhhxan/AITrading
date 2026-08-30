@@ -22,7 +22,7 @@ describe('Phase 14H - Risk Rejection Rollback', () => {
     const robotId = 'rejection-robot';
     engine.registerRobot(robotId);
 
-    // 1. Send Signal -> WAIT_RETRACEMENT
+    // 1. Send Signal -> WAIT_CANDLE_B_CONFIRMATION
     let trace = EventFactory.createTrace('corr-1', 'parent-1', 'tester', 1);
     const signalEvent = EventFactory.createEvent('STRATEGY_SIGNAL_EVENT', robotId, 1, trace, {
       direction: 'LONG',
@@ -32,7 +32,7 @@ describe('Phase 14H - Risk Rejection Rollback', () => {
     await coreEventBus.publish(signalEvent as any);
     await coreEventBus.waitForIdle(robotId);
     
-    expect(engine.getState(robotId)).toBe(RobotState.WAIT_RETRACEMENT);
+    expect(engine.getState(robotId)).toBe(RobotState.WAIT_CANDLE_B_CONFIRMATION);
 
     // 2. Trigger Retracement -> READY_TO_ENTER
     trace = EventFactory.createTrace('corr-1', 'parent-2', 'tester', 2);
@@ -67,7 +67,7 @@ describe('Phase 14H - Risk Rejection Rollback', () => {
     await coreEventBus.publish(signalEvent2 as any);
     await coreEventBus.waitForIdle(robotId);
 
-    // STATE MUST BE WAIT_RETRACEMENT AGAIN (proving robot is not bricked)
-    expect(engine.getState(robotId)).toBe(RobotState.WAIT_RETRACEMENT);
+    // STATE MUST BE WAIT_CANDLE_B_CONFIRMATION AGAIN (proving robot is not bricked)
+    expect(engine.getState(robotId)).toBe(RobotState.WAIT_CANDLE_B_CONFIRMATION);
   });
 });

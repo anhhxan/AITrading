@@ -4,7 +4,7 @@ import { StateMachineEngine } from '@/core/engine/runtime/StateMachineEngine';
 import { RiskEngine } from '@/core/engine/risk/RiskEngine';
 import { PaperExecutionEngine } from '@/core/engine/execution/PaperExecutionEngine';
 import { PaperPositionTracker } from '@/core/engine/execution/PaperPositionTracker';
-import { TradingViewSignalAdapter } from '@/core/adapters/tradingview/TradingViewSignalAdapter';
+import { TradingViewAdapter } from '@/core/adapters/tradingview/TradingViewAdapter';
 import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { EngineOrchestrator } from '@/core/engine/runtime/EngineOrchestrator';
 import { RealtimePriceFeed } from '@/core/engine/runtime/RealtimePriceFeed';
@@ -84,7 +84,7 @@ export class RobotRuntime {
             (this.positionTracker as any).positionContexts.set(this.robotId, pos.context_snapshot);
         }
 
-        if ((trueState === 'WAIT_RETRACEMENT' || trueState === 'READY_TO_ENTER') && trueActiveSignal) {
+        if ((trueState === 'WAIT_CANDLE_B_CONFIRMATION' || trueState === 'READY_TO_ENTER') && trueActiveSignal) {
             (this.stateMachine as any).activeSignals.set(this.robotId, trueActiveSignal);
             (this.riskEngine as any).activeSignals.set(this.robotId, trueActiveSignal);
         }
@@ -108,7 +108,7 @@ export class RobotRuntime {
 export class RuntimeManager {
     private runtimes: Map<string, RobotRuntime> = new Map();
     private orchestrator: EngineOrchestrator;
-    public adapter: TradingViewSignalAdapter;
+    public adapter: TradingViewAdapter;
     
     public strategyEngine: StrategyEngine;
     public stateMachine: StateMachineEngine;
@@ -118,7 +118,7 @@ export class RuntimeManager {
 
     constructor() {
         this.orchestrator = new EngineOrchestrator();
-        this.adapter = new TradingViewSignalAdapter();
+        this.adapter = new TradingViewAdapter();
         
         this.strategyEngine = new StrategyEngine();
         this.stateMachine = new StateMachineEngine();

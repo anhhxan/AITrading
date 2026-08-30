@@ -61,7 +61,7 @@ async function runPhase4SmokeTest() {
   // 2. Fire ready to enter at Candle #23 (Trigger Price = 95)
   console.log('[SMOKE TEST] Publishing STATE_TRANSITION_EVENT (READY_TO_ENTER) at #23');
   const transition = EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, 1 /* configVersion */, EventFactory.createTrace('corr-22', 'candle-23', 'StateMachineEngine', 23), {
-    previousState: RobotState.WAIT_RETRACEMENT,
+    previousState: RobotState.WAIT_CANDLE_B_CONFIRMATION,
     newState: RobotState.READY_TO_ENTER,
     reason: 'TRIGGER_MATCHED',
     triggerPrice: 95

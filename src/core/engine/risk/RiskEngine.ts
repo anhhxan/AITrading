@@ -119,12 +119,18 @@ export class RiskEngine implements IEngine {
     let sl: number | null = null;
     let tp: number | null = null;
 
+    const B1 = indicatorRef.snapshot.line1!;
+    const B2 = indicatorRef.snapshot.line2!;
+    const B3 = indicatorRef.snapshot.line3!;
+    const B4 = indicatorRef.snapshot.line4!;
+    const B5 = indicatorRef.snapshot.line5!;
+
     if (direction === 'LONG') {
-      sl = indicatorRef.snapshot.line5;
-      tp = indicatorRef.snapshot.line3;
+      sl = B4 - (B4 - B5) * 0.20;
+      tp = B3;
     } else {
-      sl = indicatorRef.snapshot.line1;
-      tp = indicatorRef.snapshot.line3;
+      sl = B2 + (B1 - B2) * 0.20;
+      tp = B3;
     }
 
     const result = calculateRiskPreview({

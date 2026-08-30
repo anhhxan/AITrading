@@ -6,7 +6,7 @@ import { getSupabaseAdmin } from "../../../lib/supabase";
 
 export enum RobotState {
   WAIT_SIGNAL = 'WAIT_SIGNAL',
-  WAIT_RETRACEMENT = 'WAIT_RETRACEMENT',
+  WAIT_CANDLE_B_CONFIRMATION = 'WAIT_CANDLE_B_CONFIRMATION',
   READY_TO_ENTER = 'READY_TO_ENTER',
   POSITION_OPEN = 'POSITION_OPEN'
 }
@@ -108,13 +108,13 @@ export class StateMachineEngine implements IEngine {
       return;
     }
     
-    // Switch to WAIT_RETRACEMENT and Override any existing signal
-    if (currentState === RobotState.WAIT_SIGNAL || currentState === RobotState.WAIT_RETRACEMENT) {
-      this.states.set(robotId, RobotState.WAIT_RETRACEMENT);
+    // Switch to WAIT_CANDLE_B_CONFIRMATION and Override any existing signal
+    if (currentState === RobotState.WAIT_SIGNAL || currentState === RobotState.WAIT_CANDLE_B_CONFIRMATION) {
+      this.states.set(robotId, RobotState.WAIT_CANDLE_B_CONFIRMATION);
       this.activeSignals.set(robotId, event);
       this.timeoutCounts.set(robotId, 0); // Reset timeout
       // signalSystemTimestamps is no longer used for business logic, relying on event.payload.barTimestamp
-      await this.persistState(robotId, RobotState.WAIT_RETRACEMENT);
+      await this.persistState(robotId, RobotState.WAIT_CANDLE_B_CONFIRMATION);
       
       const timeframe = this.robotTimeframes.get(robotId) || '1m';
       const durationMs = ((event as any).maxTimeoutCandles || 3) * this.getTimeframeDurationMs(timeframe);
@@ -133,25 +133,53 @@ export class StateMachineEngine implements IEngine {
 
   private async handleRealtimePrice(event: any) {
     if (event.price <= 0 || event.eventTimestamp <= 0) {
-      return; // ENTRY SAFETY: Ignore invalid realtime price ticks
+      return;
     }
     const robotId = event.robotId;
     const currentState = this.states.get(robotId);
     
-    if (currentState === RobotState.WAIT_RETRACEMENT) {
+    if (currentState === RobotState.WAIT_CANDLE_B_CONFIRMATION) {
       const activeSignal = this.activeSignals.get(robotId);
       if (!activeSignal) return;
 
       const currentPrice = event.price;
       const trigger = activeSignal.entryTrigger;
+      const armBounds = (activeSignal as any).armBounds;
       
+      let isCancelled = false;
+      if (armBounds) {
+          if (currentPrice < armBounds.lower || currentPrice > armBounds.upper) {
+              isCancelled = true;
+          }
+      }
+
+      if (isCancelled) {
+         this.states.set(robotId, RobotState.WAIT_SIGNAL);
+         await this.persistState(robotId, RobotState.WAIT_SIGNAL);
+         this.activeSignals.delete(robotId);
+         this.signalSystemTimestamps.delete(robotId);
+         
+         try {
+             const { getSupabaseAdmin } = require('../../../lib/supabase');
+             await getSupabaseAdmin().from('active_setups').delete().eq('robot_id', robotId);
+         } catch(e) {}
+         
+         const trace = EventFactory.createTrace(activeSignal.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
+         const transitionEvent = EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, event.configVersion || 1, trace, {
+             previousState: RobotState.WAIT_CANDLE_B_CONFIRMATION,
+             newState: RobotState.WAIT_SIGNAL,
+             reason: 'CANCEL_TRIGGER_HIT',
+             triggerPrice: currentPrice
+         });
+         await coreEventBus.publish(transitionEvent as any);
+         return;
+      }
+
       let isTriggered = false;
       
       if (trigger) {
-        if (activeSignal.direction === 'LONG') {
-          isTriggered = currentPrice >= trigger.lower! && currentPrice <= trigger.upper!;
-        } else if (activeSignal.direction === 'SHORT') {
-          isTriggered = currentPrice >= trigger.lower! && currentPrice <= trigger.upper!;
+        if (currentPrice >= trigger.lower && currentPrice <= trigger.upper) {
+          isTriggered = true;
         }
       }
       
@@ -159,47 +187,28 @@ export class StateMachineEngine implements IEngine {
         const trace = EventFactory.createTrace(
           activeSignal.trace.correlationId,
           event.eventId,
-          this.engineId, 
-          event.trace.sequence
+          this.engineId,
+          event.trace.sequence + 1
         );
-        
-        const zoneTouchedPayload = {
-            direction: activeSignal.direction,
-            price: currentPrice,
-            zone_lower: trigger?.lower,
-            zone_upper: trigger?.upper,
-            timestamp: Date.now()
-        };
-        console.log(JSON.stringify({ event: 'RETRACEMENT_ZONE_TOUCHED', robot_id: robotId, ...zoneTouchedPayload }));
-        await coreEventBus.publish(EventFactory.createEvent('RETRACEMENT_ZONE_TOUCHED', robotId, 1, trace, zoneTouchedPayload) as any);
-        
-        // Atomic transition
-        this.states.set(robotId, RobotState.READY_TO_ENTER);
-        await this.persistState(robotId, RobotState.READY_TO_ENTER);
-        
-        const entryTriggeredPayload = {
-            direction: activeSignal.direction,
-            entry_price: currentPrice,
-            signal_bar_timestamp: (activeSignal as any).barTimestamp,
-            market_timestamp: event.eventTimestamp,
-            entry_timestamp: Date.now()
-        };
-        console.log(JSON.stringify({ event: 'RETRACEMENT_ENTRY_TRIGGERED', robot_id: robotId, ...entryTriggeredPayload }));
-        await coreEventBus.publish(EventFactory.createEvent('RETRACEMENT_ENTRY_TRIGGERED', robotId, 1, trace, entryTriggeredPayload) as any);
 
-        const transitionEvent = EventFactory.createEvent(
-          'STATE_TRANSITION_EVENT', 
-          robotId, event.configVersion || 1, 
-          trace, 
-          { 
-            previousState: RobotState.WAIT_RETRACEMENT,
-            newState: RobotState.READY_TO_ENTER,
-            reason: 'TRIGGER_MATCHED',
-            triggerPrice: currentPrice
-          }
-        );
+        this.states.set(robotId, RobotState.READY_TO_ENTER);
+        this.timeoutCounts.set(robotId, 0);
+        await this.persistState(robotId, RobotState.READY_TO_ENTER);
+
+        const transitionEvent = EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, event.configVersion || 1, trace, {
+          oldState: RobotState.WAIT_CANDLE_B_CONFIRMATION,
+          newState: RobotState.READY_TO_ENTER,
+          triggerPrice: currentPrice,
+          strategyId: activeSignal.strategyId
+        });
+
+        try {
+            const { getSupabaseAdmin } = require('../../../lib/supabase');
+            await getSupabaseAdmin().from('active_setups').delete().eq('robot_id', robotId);
+        } catch(e) {}
+
         await coreEventBus.publish(transitionEvent as any);
-        return;
+        this.activeSignals.delete(robotId);
       }
     }
   }
@@ -301,7 +310,7 @@ export class StateMachineEngine implements IEngine {
   private async checkTimeouts() {
     const now = Date.now();
     for (const [robotId, state] of this.states.entries()) {
-      if (state === RobotState.WAIT_RETRACEMENT) {
+      if (state === RobotState.WAIT_CANDLE_B_CONFIRMATION) {
         const activeSignal = this.activeSignals.get(robotId);
         
         if (activeSignal) {
@@ -352,7 +361,7 @@ export class StateMachineEngine implements IEngine {
               robotId, 1, 
               trace, 
               { 
-                previousState: RobotState.WAIT_RETRACEMENT,
+                previousState: RobotState.WAIT_CANDLE_B_CONFIRMATION,
                 newState: RobotState.WAIT_SIGNAL,
                 reason: 'TIMEOUT'
               }
@@ -401,3 +410,5 @@ export class StateMachineEngine implements IEngine {
     this.status = 'STOPPED';
   }
 }
+
+
