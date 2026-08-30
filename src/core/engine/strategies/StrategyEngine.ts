@@ -183,6 +183,7 @@ export class StrategyEngine implements IEngine {
            persistent: signal.persistent,
            entryTrigger: signal.entryTrigger,
            cancelTrigger: signal.cancelTrigger,
+             armBounds: signal.armBounds,
            strategyId: strategy.name,
            strategyVersion: 'v1.0.0',
            indicatorReference: {
@@ -217,3 +218,4 @@ export class StrategyEngine implements IEngine {
     this.status = 'STOPPED';
   }
 }
+

@@ -60,7 +60,7 @@ export function calculateRiskPreview(params: RiskCalculationParams): RiskCalcula
     reward = entry - tp;
   }
 
-  if (risk <= 0 || reward <= 0) return reject('INVALID_RISK_REWARD');
+  if (risk <= 0 || reward <= 0) { console.log('RISK_REWARD FAILED: entry', entry, 'sl', sl, 'tp', tp, 'risk', risk, 'reward', reward); return reject('INVALID_RISK_REWARD'); }
 
   const positionValue = accountBalance * (positionAllocationPercent / 100);
   let positionSize = (positionValue * leverage) / entry;
@@ -85,3 +85,4 @@ export function calculateRiskPreview(params: RiskCalculationParams): RiskCalcula
     notional: positionSize * entry
   };
 }
+

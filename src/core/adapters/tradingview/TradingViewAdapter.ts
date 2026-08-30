@@ -169,11 +169,11 @@ export class TradingViewAdapter {
     }
 
     // CANONICAL MAPPING
-    const line1 = payload.plots.upper;
-    const line2 = payload.plots.upper2;
+    const line1 = payload.plots.upper2;
+    const line2 = payload.plots.upper;
     const line3 = payload.plots.basis;
-    const line4 = payload.plots.lower2;
-    const line5 = payload.plots.lower;
+    const line4 = payload.plots.lower;
+    const line5 = payload.plots.lower2;
 
     const candle = {
       timestamp: payload.barTimestamp,
