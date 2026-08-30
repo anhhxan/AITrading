@@ -10,16 +10,17 @@ basis = ta.sma(src, length)
 dev = mult * ta.stdev(src, length)
 dev2 = mult2 * ta.stdev(src, length)
 
-upper2 = basis + dev
-upper = basis + dev2
-lower = basis - dev2
-lower2 = basis - dev
+B1 = basis + dev
+B2 = basis + dev2
+B3 = basis
+B4 = basis - dev2
+B5 = basis - dev
 
-plot(upper2, color=color.red, title="Upper 2 (B1)")
-plot(upper, color=color.orange, title="Upper (B2)")
-plot(basis, color=color.white, title="Basis (B3)")
-plot(lower, color=color.blue, title="Lower (B4)")
-plot(lower2, color=color.green, title="Lower 2 (B5)")
+plot(B1, color=color.red, title="B1 (+2s)")
+plot(B2, color=color.orange, title="B2 (+1s)")
+plot(B3, color=color.white, title="B3 (Basis)")
+plot(B4, color=color.blue, title="B4 (-1s)")
+plot(B5, color=color.green, title="B5 (-2s)")
 
 if barstate.isrealtime and barstate.isconfirmed
     string jsonStr = '{' +
@@ -38,11 +39,11 @@ if barstate.isrealtime and barstate.isconfirmed
         '"mult2":' + str.tostring(mult2) + 
       '},' +
       '"plots":{' +
-        '"upper2":' + str.tostring(upper2) + ',' +    
-        '"upper":' + str.tostring(upper) + ',' +      
-        '"basis":' + str.tostring(basis) + ',' +      
-        '"lower":' + str.tostring(lower) + ',' +    
-        '"lower2":' + str.tostring(lower2) +
+        '"B1":' + str.tostring(B1) + ',' +    
+        '"B2":' + str.tostring(B2) + ',' +      
+        '"B3":' + str.tostring(B3) + ',' +      
+        '"B4":' + str.tostring(B4) + ',' +    
+        '"B5":' + str.tostring(B5) +
       '}' +
     '}'
 

@@ -70,11 +70,11 @@ async function runPipeline() {
         volume: 10,
         indicator: { length: 20, source: "close", mult: 2.0, mult2: 1.0 },
         plots: {
-            upper2: 64000,
-            upper: 63000,
-            basis: 62000,
-            lower: 61000,
-            lower2: 60000
+            B1: 64000,
+            B2: 63000,
+            B3: 62000,
+            B4: 61000,
+            B5: 60000
         }
     };
 
@@ -148,6 +148,7 @@ async function runPipeline() {
 }
 
 runPipeline().catch(console.error);
+
 
 
 

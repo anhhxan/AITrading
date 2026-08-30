@@ -44,6 +44,7 @@ export class StateMachineEngine implements IEngine {
   private states: Map<string, RobotState> = new Map();
   private timeoutCounts: Map<string, number> = new Map();
   private activeSignals: Map<string, StrategySignalEvent> = new Map();
+  private activePositions: Map<string, any> = new Map();
   private signalSystemTimestamps: Map<string, number> = new Map(); // Kept for backwards compatibility if needed, but not used for business logic
   private robotTimeframes: Map<string, string> = new Map();
   private intervalId: any;
@@ -214,6 +215,7 @@ export class StateMachineEngine implements IEngine {
   }
 
   private async handlePositionOpened(event: PositionOpenedEvent) {
+      this.activePositions.set(event.robotId, { side: event.side, sl: event.stopLoss, tp: event.takeProfit, symbol: event.symbol });
     const robotId = event.robotId;
     const currentState = this.states.get(robotId);
     
@@ -246,6 +248,7 @@ export class StateMachineEngine implements IEngine {
   }
 
   private async handlePositionClosed(event: PositionClosedEvent) {
+      this.activePositions.delete(event.robotId);
     const robotId = event.robotId;
     const currentState = this.states.get(robotId);
     
@@ -314,6 +317,7 @@ export class StateMachineEngine implements IEngine {
         const activeSignal = this.activeSignals.get(robotId);
         
         if (activeSignal) {
+            if ((activeSignal as any).persistent) continue;
           const timeframe = this.robotTimeframes.get(robotId);
           if (!timeframe) {
               console.error(`[StateMachineEngine] CONFIG_ERROR for ${robotId}: Missing timeframe config`);

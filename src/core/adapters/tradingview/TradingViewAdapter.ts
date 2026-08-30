@@ -169,11 +169,17 @@ export class TradingViewAdapter {
     }
 
     // CANONICAL MAPPING
-    const line1 = payload.plots.upper2;
-    const line2 = payload.plots.upper;
-    const line3 = payload.plots.basis;
-    const line4 = payload.plots.lower;
-    const line5 = payload.plots.lower2;
+    const line1 = payload.plots.B1;
+    const line2 = payload.plots.B2;
+    const line3 = payload.plots.B3;
+    const line4 = payload.plots.B4;
+    const line5 = payload.plots.B5;
+
+    if (!(line1 > line2 && line2 > line3 && line3 > line4 && line4 > line5)) {
+      console.error(`[TradingViewAdapter] VALIDATION REJECTED: Bands out of order: B1=${line1}, B2=${line2}, B3=${line3}, B4=${line4}, B5=${line5}`);
+      return { accepted: false, validationErrors: ["Bands out of order"] };
+    }
+
 
     const candle = {
       timestamp: payload.barTimestamp,
@@ -200,11 +206,11 @@ export class TradingViewAdapter {
 
       if (payload.previousPayload.plots) {
         previousSnapshot = {
-          line1: payload.previousPayload.plots.upper,
-          line2: payload.previousPayload.plots.upper2,
-          line3: payload.previousPayload.plots.basis,
-          line4: payload.previousPayload.plots.lower2,
-          line5: payload.previousPayload.plots.lower,
+          line1: payload.previousPayload.plots.B1,
+          line2: payload.previousPayload.plots.B2,
+          line3: payload.previousPayload.plots.B3,
+          line4: payload.previousPayload.plots.B4,
+          line5: payload.previousPayload.plots.B5,
         };
       }
     }
@@ -318,3 +324,4 @@ export class TradingViewAdapter {
     };
   }
 }
+

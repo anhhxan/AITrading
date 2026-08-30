@@ -1,0 +1,103 @@
+//@version=5
+indicator("BB_MB_Signal_Monitor", overlay=true)
+
+length = input.int(20, title="BB Length")
+mult = input.float(2.0, title="BB Mult")
+mult2 = input.float(1.0, title="BB Mult 2")
+src = input.source(close, title="Source")
+
+basis = ta.sma(src, length)
+dev = mult * ta.stdev(src, length)
+dev2 = mult2 * ta.stdev(src, length)
+
+B1 = basis + dev
+B2 = basis + dev2
+B3 = basis
+B4 = basis - dev2
+B5 = basis - dev
+
+plot(B1, color=color.red, title="B1 (+2s)")
+plot(B2, color=color.orange, title="B2 (+1s)")
+plot(B3, color=color.white, title="B3 (Basis)")
+plot(B4, color=color.blue, title="B4 (-1s)")
+plot(B5, color=color.green, title="B5 (-2s)")
+
+// This is purely for visual monitoring, DOES NOT trade
+varip string monitorState = "WAIT_SIGNAL"
+var float monitorTrigger = na
+var float monitorSL = na
+
+// Candlestick tracking
+if barstate.isconfirmed
+    if monitorState == "WAIT_SIGNAL"
+        if close >= B5 and close <= B4
+            monitorState := "CANDIDATE_LONG"
+        else if close >= B2 and close <= B1
+            monitorState := "CANDIDATE_SHORT"
+
+if barstate.isrealtime
+    if monitorState == "CANDIDATE_LONG"
+        if low >= B4 and high <= B3
+            monitorState := "ARM_LONG"
+            monitorTrigger := B4 + (B3 - B4) * 0.10
+            monitorSL := B4 - (B4 - B5) * 0.20
+        else if low < B4 or high > B3
+            monitorState := "WAIT_SIGNAL" // Cancelled by Candle B invalid
+            
+    else if monitorState == "CANDIDATE_SHORT"
+        if low >= B3 and high <= B2
+            monitorState := "ARM_SHORT"
+            monitorTrigger := B2 - (B2 - B3) * 0.10
+            monitorSL := B2 + (B1 - B2) * 0.20
+        else if low < B3 or high > B2
+            monitorState := "WAIT_SIGNAL"
+
+    if monitorState == "ARM_LONG"
+        if close <= monitorTrigger
+            monitorState := "FIRE_LONG"
+        else if close > B3
+            monitorState := "WAIT_SIGNAL" // Cancel
+            
+    else if monitorState == "ARM_SHORT"
+        if close >= monitorTrigger
+            monitorState := "FIRE_SHORT"
+        else if close < B3
+            monitorState := "WAIT_SIGNAL" // Cancel
+
+    if monitorState == "FIRE_LONG"
+        if close <= monitorSL
+            monitorState := "WAIT_SIGNAL" // STOP LOSS
+        else if close >= B3
+            monitorState := "WAIT_SIGNAL" // TAKE PROFIT
+            
+    else if monitorState == "FIRE_SHORT"
+        if close >= monitorSL
+            monitorState := "WAIT_SIGNAL" // STOP LOSS
+        else if close <= B3
+            monitorState := "WAIT_SIGNAL" // TAKE PROFIT
+
+if barstate.islast
+    var table statusTable = table.new(position.top_right, 2, 8, bgcolor=color.new(color.black, 50), border_width=1)
+    table.cell(statusTable, 0, 0, "STATE", text_color=color.white)
+    table.cell(statusTable, 1, 0, monitorState, text_color=color.yellow)
+    
+    table.cell(statusTable, 0, 1, "TRIGGER", text_color=color.white)
+    table.cell(statusTable, 1, 1, str.tostring(monitorTrigger, "#.##"), text_color=color.yellow)
+    
+    table.cell(statusTable, 0, 2, "SL", text_color=color.white)
+    table.cell(statusTable, 1, 2, str.tostring(monitorSL, "#.##"), text_color=color.yellow)
+    
+    table.cell(statusTable, 0, 3, "B1", text_color=color.white)
+    table.cell(statusTable, 1, 3, str.tostring(B1, "#.##"), text_color=color.red)
+    
+    table.cell(statusTable, 0, 4, "B2", text_color=color.white)
+    table.cell(statusTable, 1, 4, str.tostring(B2, "#.##"), text_color=color.orange)
+    
+    table.cell(statusTable, 0, 5, "B3", text_color=color.white)
+    table.cell(statusTable, 1, 5, str.tostring(B3, "#.##"), text_color=color.white)
+    
+    table.cell(statusTable, 0, 6, "B4", text_color=color.white)
+    table.cell(statusTable, 1, 6, str.tostring(B4, "#.##"), text_color=color.blue)
+    
+    table.cell(statusTable, 0, 7, "B5", text_color=color.white)
+    table.cell(statusTable, 1, 7, str.tostring(B5, "#.##"), text_color=color.green)

@@ -7,6 +7,9 @@ import { IndicatorUpdatedEvent } from "../indicators/IndicatorEngine";
 import { upsertSignalTrace } from '@/lib/diagnostics';
 
 export interface StrategySignalEvent extends BaseEvent {
+  persistent?: boolean;
+  maxTimeoutCandles?: number;
+  armBounds?: any;
   direction: 'LONG' | 'SHORT' | 'NONE';
   maxTimeoutCandles: number;
   entryTrigger?: {
@@ -183,7 +186,7 @@ export class StrategyEngine implements IEngine {
            persistent: signal.persistent,
            entryTrigger: signal.entryTrigger,
            cancelTrigger: signal.cancelTrigger,
-             armBounds: signal.armBounds,
+             armBounds: (signal as any).armBounds,
            strategyId: strategy.name,
            strategyVersion: 'v1.0.0',
            indicatorReference: {
