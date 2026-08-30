@@ -2,8 +2,8 @@
 indicator("DUMB PINE - State Reporter V2", overlay=true)
 
 length = input.int(20, title="BB Length")
-mult = input.float(2.0, title="BB Mult")
-mult2 = input.float(1.0, title="BB Mult 2")
+mult = input.float(2.5, title="BB Mult")
+mult2 = input.float(1.3, title="BB Mult 2")
 src = input.source(close, title="Source")
 
 basis = ta.sma(src, length)
@@ -16,11 +16,35 @@ B3 = basis
 B4 = basis - dev2
 B5 = basis - dev
 
-plot(B1, color=color.red, title="B1 (+2s)")
-plot(B2, color=color.orange, title="B2 (+1s)")
-plot(B3, color=color.white, title="B3 (Basis)")
-plot(B4, color=color.blue, title="B4 (-1s)")
-plot(B5, color=color.green, title="B5 (-2s)")
+// Plot outside the realtime condition for continuous visibility
+// Use a single color (e.g. yellow) to easily compare and overlay with the original BB+MB
+c_line = color.new(color.yellow, 0)
+plot(B1, color=c_line, title="B1 (+Mult)")
+plot(B2, color=c_line, title="B2 (+Mult2)")
+plot(B3, color=c_line, title="B3 (Basis)")
+plot(B4, color=c_line, title="B4 (-Mult2)")
+plot(B5, color=c_line, title="B5 (-Mult)")
+
+// Debug Table for visual validation
+var table debugTable = table.new(position.top_right, 2, 6, bgcolor=color.new(color.black, 80), border_width=1)
+if barstate.islast
+    table.cell(debugTable, 0, 0, "Band", text_color=color.white)
+    table.cell(debugTable, 1, 0, "Value", text_color=color.white)
+    
+    table.cell(debugTable, 0, 1, "B1", text_color=color.white)
+    table.cell(debugTable, 1, 1, str.tostring(B1, "#.####"), text_color=color.white)
+    
+    table.cell(debugTable, 0, 2, "B2", text_color=color.white)
+    table.cell(debugTable, 1, 2, str.tostring(B2, "#.####"), text_color=color.white)
+    
+    table.cell(debugTable, 0, 3, "B3", text_color=color.white)
+    table.cell(debugTable, 1, 3, str.tostring(B3, "#.####"), text_color=color.white)
+    
+    table.cell(debugTable, 0, 4, "B4", text_color=color.white)
+    table.cell(debugTable, 1, 4, str.tostring(B4, "#.####"), text_color=color.white)
+    
+    table.cell(debugTable, 0, 5, "B5", text_color=color.white)
+    table.cell(debugTable, 1, 5, str.tostring(B5, "#.####"), text_color=color.white)
 
 if barstate.isrealtime and barstate.isconfirmed
     string jsonStr = '{' +
