@@ -8,7 +8,6 @@ import { upsertSignalTrace } from '@/lib/diagnostics';
 
 export interface StrategySignalEvent extends BaseEvent {
   persistent?: boolean;
-  maxTimeoutCandles?: number;
   armBounds?: any;
   direction: 'LONG' | 'SHORT' | 'NONE';
   maxTimeoutCandles: number;

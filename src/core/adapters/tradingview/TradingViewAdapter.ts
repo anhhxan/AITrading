@@ -34,11 +34,11 @@ export interface TradingViewPayload {
     mult2: number;
   };
   plots: {
-    upper: number;
-    upper2: number;
-    basis: number;
-    lower2: number;
-    lower: number;
+    B1: number;
+    B2: number;
+    B3: number;
+    B4: number;
+    B5: number;
   };
 }
 

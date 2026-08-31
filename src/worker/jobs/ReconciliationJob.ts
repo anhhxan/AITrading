@@ -90,11 +90,72 @@ export class ReconciliationJob {
                 }
             }
 
+            
+            // 2.5 Recover stale PROCESSING commands
+            try {
+                const { data: recoveredCount, error: recoverErr } = await supabase.rpc('recover_stale_robot_commands');
+                  await supabase.rpc('quarantine_poison_commands');
+                if (recoverErr) {
+                    console.error('[ReconciliationJob] Error recovering stale commands:', recoverErr);
+                } else if (recoveredCount && recoveredCount > 0) {
+                    console.log(`[CommandRecovery] recovered=${recoveredCount}`);
+                    console.log(`[CommandRecovery] command_id=batch PROCESSING -> RECEIVED`);
+                }
+            } catch (err) {
+                console.error('[ReconciliationJob] Exception during stale command recovery:', err);
+            }
+
             console.log('[ReconciliationJob] RECONCILIATION_SCAN completed');
+
+            // 3. Data Retention (Run safely in small batches)
+            await this.runDataRetention(supabase);
         } catch (error) {
             console.error('[ReconciliationJob] Exception during run:', error);
         }
     }
+
+    private static async runDataRetention(supabase: any) {
+        try {
+            console.log('[ReconciliationJob] DATA_RETENTION started');
+            const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+            
+            // Cleanup robot_commands (SUCCEEDED / FAILED only)
+            const { data: oldCmds, error: cmdErr } = await supabase
+                .from('robot_commands')
+                .select('id')
+                .in('status', ['SUCCEEDED', 'FAILED'])
+                .lt('created_at', threeDaysAgo)
+                .limit(500);
+
+            if (cmdErr) console.error('[ReconciliationJob] Fetch old commands error:', cmdErr);
+            else if (oldCmds && oldCmds.length > 0) {
+                const ids = oldCmds.map((c: any) => c.id);
+                const { error: delErr } = await supabase.from('robot_commands').delete().in('id', ids);
+                if (!delErr) console.log(`[ReconciliationJob] RETENTION: Deleted ${ids.length} old robot_commands`);
+                else console.error('[ReconciliationJob] Delete old commands error:', delErr);
+            }
+
+            // Cleanup core_events
+            const { data: oldEvents, error: evErr } = await supabase
+                .from('core_events')
+                .select('id')
+                .lt('created_at', threeDaysAgo)
+                .limit(500);
+
+            if (evErr) console.error('[ReconciliationJob] Fetch old events error:', evErr);
+            else if (oldEvents && oldEvents.length > 0) {
+                const ids = oldEvents.map((e: any) => e.id);
+                const { error: delErr } = await supabase.from('core_events').delete().in('id', ids);
+                if (!delErr) console.log(`[ReconciliationJob] RETENTION: Deleted ${ids.length} old core_events`);
+                else console.error('[ReconciliationJob] Delete old events error:', delErr);
+            }
+            
+            console.log('[ReconciliationJob] DATA_RETENTION completed');
+        } catch (error) {
+            console.error('[ReconciliationJob] Exception during retention:', error);
+        }
+    }
+
 
     /**
      * Xác minh FAIL-SAFE: Chỉ trả về true nếu chắc chắn 100% record này là rác.

@@ -98,7 +98,7 @@ async function bootstrap() {
     // Heartbeat logic
     setInterval(() => {
         runtimeManager.heartbeatAll().catch(e => console.error('[Heartbeat] Error:', e));
-    }, 10000);
+    }, 30000);
 
     const { ReconciliationJob } = require('./jobs/ReconciliationJob');
     ReconciliationJob.start(300000); // 5 minutes

@@ -24,9 +24,31 @@ export class PaperExecutionEngine implements IEngine {
     console.log(`[PAPER] EXECUTION_STARTED TEST_ID=${event.trace.correlationId} robot=${event.robotId}`);
     console.log(`[PAPER] EVENT PAYLOAD:`, JSON.stringify(event, null, 2));
     const supabase = getSupabaseAdmin();
-
+    let lockAcquired = false;
     try {
+      // --- PHASE 3.13H.2: CRASH-SAFE EXECUTION ATOMICITY ---
+      const { data: _lockAcq, error: lockErr } = await supabase.rpc('acquire_execution_lock', { p_correlation_id: event.trace.correlationId });
+      lockAcquired = _lockAcq || false;
+      
+      if (lockErr || !lockAcquired) {
+          console.log(`[PaperExecutionEngine] IDEMPOTENCY_SKIP: Lock not acquired (Already COMPLETED or currently EXECUTING) for correlationId=${event.trace.correlationId}`);
+          return;
+      }
+      // -----------------------------------------------------
+const markCompleted = async (cid: string) => {
+          if (lockAcquired) {
+              await supabase.from('idempotency_keys').update({ status: 'COMPLETED', updated_at: new Date().toISOString() }).eq('key_id', cid);
+          }
+      };
+
+      // CLEANUP ORPHANS ON RECOVERY: Delete ephemeral records for this correlationId to allow safe retry
+      await supabase.from('active_orders').delete().eq('correlation_id', event.trace.correlationId);
+      const orphanClientOrderId = `PAPER-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
+      const orphanCloseClientOrderId = `PAPER-CLS-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
+      await supabase.from('execution_intents').delete().in('client_order_id', [orphanClientOrderId, orphanCloseClientOrderId]);
+      
       const { data: robot, error: robotErr } = await supabase
+
         .from('robots')
         .select('trading_mode, trading_enabled, status')
         .eq('id', event.robotId)
@@ -78,7 +100,8 @@ export class PaperExecutionEngine implements IEngine {
                     filled_quantity: existingPos.quantity,
                     average_fill_price: event.entryReferencePrice,
                     status: 'FILLED',
-                    role: 'TAKER'
+                    role: 'TAKER',
+                  correlation_id: event.trace.correlationId
                   });
               }
 
@@ -96,7 +119,7 @@ export class PaperExecutionEngine implements IEngine {
                   duration_seconds: 0,
                   close_reason: (event as any).closeReason || 'STOP_LOSS',
                   symbol: existingPos.symbol,
-                  correlation_id: existingPos.correlation_id
+                  correlation_id: event.trace.correlationId
               });
               if (thErr) console.error('[PaperExecutionEngine] STOP/CLOSE trade_history insert failed:', thErr);
 
@@ -165,7 +188,8 @@ export class PaperExecutionEngine implements IEngine {
                 filled_quantity: existingPos.quantity,
                 average_fill_price: event.entryReferencePrice,
                 status: 'FILLED',
-                role: 'TAKER'
+                role: 'TAKER',
+                  correlation_id: event.trace.correlationId
               });
           }
 
@@ -184,7 +208,7 @@ export class PaperExecutionEngine implements IEngine {
                 duration_seconds: 0,
                 close_reason: 'REVERSAL',
                 symbol: existingPos.symbol,
-                correlation_id: existingPos.correlation_id
+                correlation_id: event.trace.correlationId
             });
           if (histErr) console.error('[PaperExecutionEngine] REVERSAL trade_history insert failed:', histErr);
 
@@ -252,7 +276,8 @@ export class PaperExecutionEngine implements IEngine {
           filled_quantity: event.positionSize,
           average_fill_price: event.entryReferencePrice,
           status: 'FILLED',
-          role: 'TAKER'
+          role: 'TAKER',
+                  correlation_id: event.trace.correlationId
         })
         .select('id')
         .single();
@@ -277,6 +302,7 @@ export class PaperExecutionEngine implements IEngine {
           realized_pnl: 0,
           stop_loss_price: event.stopLoss,
           take_profit_price: event.takeProfit,
+          correlation_id: event.trace.correlationId,
           context_snapshot: {
             executionSymbol: event.executionSymbol,
             tradingViewSymbol: event.tradingViewSymbol,
@@ -314,8 +340,11 @@ export class PaperExecutionEngine implements IEngine {
       });
       await coreEventBus.publish(openedEvent as any);
       console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${event.trace.correlationId} position opened`);
+      await markCompleted(event.trace.correlationId);
 
-    } catch (e: any) {
+
+
+} catch (e: any) {
         console.log(`[PAPER] EXECUTION_REJECTED TEST_ID=${event.trace.correlationId} error=${e.message}`);
         console.error('[PaperExecutionEngine] EXCEPTION:', e.message);
     }

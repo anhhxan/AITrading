@@ -47,15 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         // Will reject below
     }
 
-    console.log(JSON.stringify({
-        event: 'VERCEL_RECEIVED',
-        request_id,
-        robot_id: robotId,
-        eventTimestamp,
-        setupId,
-        tvEvent,
-        received_at: new Date(vercel_received_at).toISOString()
-    }));
+    console.log(`[Webhook] Received request ${request_id} for robot ${robotId}`);
     
     // Best effort diagnostic: Initial Received
     if (eventTimestamp !== 'unknown') {
@@ -88,23 +80,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     // Re-stringify the payload after deleting secret to keep identity string safe
     const payloadStr = JSON.stringify(payload);
 
-    console.log(JSON.stringify({
-        event: 'VERCEL_AUTH_RESULT',
-        request_id,
-        auth_valid
-    }));
+    
 
     if (!auth_valid) {
+        console.error(`[Webhook] Auth failed ${request_id}`);
         if (eventTimestamp !== 'unknown') upsertSignalTrace({ robot_id: robotId, bar_timestamp: Number(eventTimestamp), vercel_status: 'RED' });
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    console.log(JSON.stringify({
-        event: 'VERCEL_PAYLOAD_VALIDATION',
-        request_id,
-        eventTimestamp,
-        valid: typeof payload.eventTimestamp === 'number' && typeof payload.setup_id === 'string'
-    }));
+    
 
     // Ensure robot exists and has ACTIVE config, and fetch current state (IDLE, RUNNING, etc)
     const supabase = getSupabaseAdmin();
@@ -150,12 +134,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         result: payload 
     });
 
-    console.log(JSON.stringify({
-        event: 'VERCEL_IDEMPOTENCY_CHECK',
-        request_id,
-        hash_prefix,
-        duplicate: cmdError && cmdError.code === '23505'
-    }));
+    
+    if (!cmdError) {
+        console.log(`[Webhook] Command created ${deterministicCommandId}`);
+    } else if (cmdError.code === '23505') {
+        console.log(`[Webhook] Duplicate ignored ${deterministicCommandId}`);
+    }
+
 
     if (cmdError) {
         if (cmdError.code === '23505') {

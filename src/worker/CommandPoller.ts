@@ -5,6 +5,9 @@ import { upsertSignalTrace } from '@/lib/diagnostics';
 
 export class CommandPoller {
     private isPolling = false;
+    private currentDelay = 1000;
+    private readonly minDelay = 1000;
+    private readonly maxDelay = 2000;
     private timer: NodeJS.Timeout | null = null;
     private supabase = getSupabaseAdmin();
 
@@ -24,69 +27,50 @@ export class CommandPoller {
     private async poll() {
         if (!this.isPolling) return;
 
+        let foundCommand = false;
         try {
-            // Find one PENDING command
-            const { data: commands, error } = await this.supabase
-                .from('robot_commands')
-                .select('command_id, robot_id, command_type, created_at')
-                .eq('status', 'RECEIVED')
-                .order('created_at', { ascending: true })
-                .limit(1);
+            const workerId = process.env.WORKER_ID || 'PAPER-WORKER-01';
+            
+            // Use RPC to atomically claim command
+            const { data: commands, error } = await this.supabase.rpc('claim_robot_commands', {
+                p_worker_id: workerId,
+                p_limit: 1
+            });
 
             if (error) {
-                console.error('[CommandPoller] Polling error:', error);
+                console.error('[CommandPoller] Polling error:', error.message || error);
             } else if (commands && commands.length > 0) {
-                const cmdStub = commands[0];
+                foundCommand = true;
+                const fullCmd = commands[0];
                 
-                // Optimistic lock: update to PROCESSING without selecting the full row back
-                const { error: lockErr } = await this.supabase
-                    .from('robot_commands')
-                    .update({ status: 'PROCESSING', processed_at: new Date().toISOString() })
-                    .eq('command_id', cmdStub.command_id)
-                    .eq('status', 'RECEIVED');
-
-                if (!lockErr) {
-                    // Fetch the full command including the payload
-                    const { data: fullCmd, error: fetchErr } = await this.supabase
-                        .from('robot_commands')
-                        .select('command_id, robot_id, command_type, result, correlation_id, created_at')
-                        .eq('command_id', cmdStub.command_id)
-                        .single();
-                        
-                    if (!fetchErr && fullCmd) {
-                        console.log(JSON.stringify({
-                            event: 'COMMAND_POLLER_FOUND',
-                            command_id: fullCmd.command_id,
-                            correlation_id: fullCmd.correlation_id,
-                            robot_id: fullCmd.robot_id,
-                            barTimestamp: fullCmd.result?.barTimestamp || 'unknown'
-                        }));
-                        
-                        if (fullCmd.command_type === 'TV_SIGNAL' && fullCmd.result?.barTimestamp) {
-                            upsertSignalTrace({
-                                robot_id: fullCmd.robot_id,
-                                bar_timestamp: Number(fullCmd.result.barTimestamp),
-                                poller_status: 'GREEN'
-                            });
-                        }
-
-                        console.log(JSON.stringify({
-                            event: 'COMMAND_POLLER_PROCESSING',
-                            command_id: fullCmd.command_id,
-                            correlation_id: fullCmd.correlation_id,
-                            barTimestamp: fullCmd.result?.barTimestamp || 'unknown'
-                        }));
-                        
-                        await this.processCommand(fullCmd);
-                    }
+                if (fullCmd.command_type === 'TV_SIGNAL' && fullCmd.result?.barTimestamp) {
+                    upsertSignalTrace({
+                        robot_id: fullCmd.robot_id,
+                        bar_timestamp: Number(fullCmd.result.barTimestamp),
+                        poller_status: 'GREEN'
+                    });
                 }
+
+                console.log(JSON.stringify({
+                    event: 'COMMAND_POLLER_CLAIMED',
+                    command_id: fullCmd.command_id,
+                    correlation_id: fullCmd.correlation_id,
+                    robot_id: fullCmd.robot_id
+                }));
+                
+                await this.processCommand(fullCmd);
             }
-        } catch (err) {
-            console.error('[CommandPoller] Exception in poll:', err);
+        } catch (err: any) {
+            console.error('[CommandPoller] Exception in poll:', err.message || err);
         }
 
         if (this.isPolling) {
-            this.timer = setTimeout(() => this.poll(), 1000);
+            if (foundCommand) {
+                this.currentDelay = this.minDelay;
+            } else {
+                this.currentDelay = Math.min(this.currentDelay * 2, this.maxDelay);
+            }
+            this.timer = setTimeout(() => this.poll(), this.currentDelay);
         }
     }
 
@@ -133,12 +117,7 @@ export class CommandPoller {
                     payload.previousPayload = lastCmd.result.payload || lastCmd.result; 
                 }
 
-                console.log(JSON.stringify({
-                    event: 'COMMAND_POLLER_DISPATCH',
-                    command_id: cmd.command_id,
-                    correlation_id: cmd.correlation_id,
-                    barTimestamp: payload.barTimestamp || 'unknown'
-                }));
+                
 
                 const result = await this.runtimeManager.adapter.handleWebhook(payload, cmd.robot_id, cmd.correlation_id);
                 
