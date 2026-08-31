@@ -11,7 +11,7 @@ export default async function RobotsPage() {
 
   const { data: allRobots } = await supabase
     .from('robots')
-    .select('*, trading_accounts(name)')
+    .select('*, trading_accounts!fk_robots_trading_account(name)')
     .order('display_order', { ascending: true })
     .order('created_at', { ascending: false })
 

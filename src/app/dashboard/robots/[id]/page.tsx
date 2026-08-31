@@ -16,7 +16,7 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
   // Fetch Robot
   const { data: robot } = await supabase
     .from('robots')
-    .select('*, trading_accounts(name)')
+    .select('*, trading_accounts!fk_robots_trading_account(name)')
     .eq('id', resolvedParams.id)
     .single()
 

@@ -5,6 +5,7 @@ length = input.int(20, title="BB Length")
 mult = input.float(2.5, title="BB Mult")
 mult2 = input.float(1.3, title="BB Mult 2")
 src = input.source(close, title="Source")
+webhookSecret = input.string("", title="Webhook Secret", tooltip="Bắt buộc: Nhập đúng TV_WEBHOOK_SECRET của Vercel Backend", confirm=true)
 
 basis = ta.sma(src, length)
 dev = mult * ta.stdev(src, length)
@@ -48,6 +49,7 @@ if barstate.islast
 
 if barstate.isrealtime and barstate.isconfirmed
     string jsonStr = '{' +
+      '"secret":"' + webhookSecret + '",' +
       '"tvSymbol":"' + syminfo.tickerid + '",' +
       '"timeframe":"' + timeframe.period + '",' +
       '"barTimestamp":' + str.tostring(time) + ',' +
