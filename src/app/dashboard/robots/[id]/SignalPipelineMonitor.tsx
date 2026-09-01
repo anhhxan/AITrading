@@ -308,7 +308,7 @@ export default function SignalPipelineMonitor({ robotId }: { robotId: string }) 
             <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h1 className="text-2xl font-bold">PAPER 1M - SIGNAL MONITOR</h1>
+                        <h1 className="text-2xl font-bold">{robotStatus ? `${robotStatus.trading_mode} ${robotStatus.timeframe?.toUpperCase()}` : 'PAPER 1M'} - SIGNAL MONITOR</h1>
                         <p className="text-muted-foreground">Giám sát chuỗi giao dịch và tín hiệu Phase 3</p>
                     </div>
                 </div>

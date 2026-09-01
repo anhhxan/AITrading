@@ -147,13 +147,34 @@ export class EventBus {
       }
 
       // Persistence Layer - Awaited for Vercel Serverless safety but isolated from Core failures
+      const AUDIT_EVENTS = [
+        'POSITION_OPENED_EVENT', 'POSITION_CLOSED_EVENT', 'TRADE_PLAN_EVENT', 
+        'ORDER_CREATED_EVENT', 'ORDER_SUBMITTED_EVENT', 'ORDER_FILLED_EVENT', 
+        'ORDER_CANCELLED_EVENT', 'ORDER_REJECTED_EVENT', 'RISK_REJECTED_EVENT', 
+        'EXECUTION_ERROR_EVENT', 'SIGNAL_RECEIVED_EVENT', 'SIGNAL_ACCEPTED_EVENT', 
+        'SIGNAL_REJECTED_EVENT', 'STOP_LOSS_EVENT', 'TAKE_PROFIT_EVENT', 'REVERSAL_EVENT',
+        'POSITION_OPENED', 'POSITION_CLOSED', 'TRADE_PLAN', 'ORDER_CREATED',
+        'ORDER_SUBMITTED', 'ORDER_FILLED', 'ORDER_CANCELLED', 'ORDER_REJECTED',
+        'RISK_REJECTED', 'EXECUTION_ERROR', 'SIGNAL_RECEIVED', 'SIGNAL_ACCEPTED',
+        'SIGNAL_REJECTED', 'STOP_LOSS', 'TAKE_PROFIT', 'REVERSAL'
+      ];
+
       const NOISE_EVENTS = [
         'REALTIME_PRICE_EVENT', 'PRICE_HEARTBEAT_EVENT', 'WORKER_HEARTBEAT', 
         'WORKER_HEARTBEAT_EVENT', 'SYSTEM_HEARTBEAT', 
         'REALTIME_PRICE_FEED_STALE', 'REALTIME_PRICE_FEED_CONNECTING', 
-        'REALTIME_PRICE_FEED_DISCONNECTED', 'REALTIME_PRICE_FEED_CONNECTED'
+        'REALTIME_PRICE_FEED_DISCONNECTED', 'REALTIME_PRICE_FEED_CONNECTED',
+        'REALTIME_PRICE_FEED_STARTED',
+        'CANDLE_CLOSED', 'INDICATOR_UPDATED', 'STRATEGY_EVALUATED', 
+        'STATE_TRANSITION_EVENT', 'STRATEGY_SIGNAL_EVENT'
       ];
-      if (NOISE_EVENTS.includes(event.eventType)) continue; // Do not save tick/heartbeat data to DB to save cost
+
+      if (NOISE_EVENTS.includes(event.eventType)) continue; 
+      
+      if (!AUDIT_EVENTS.includes(event.eventType)) {
+         console.warn(`[EventBus] Unclassified event ${event.eventType} skipped from DB persistence`);
+         continue;
+      }
 
       try {
         const supabase = getSupabaseAdmin();
