@@ -14,6 +14,8 @@ export class BB_Strategy implements IStrategy {
     }
 
     const currClose = currentPrice;
+    const currHigh = context.currentHigh;
+    const currLow = context.currentLow;
     
     // B1 = upper2, B2 = upper, B3 = basis, B4 = lower, B5 = lower2
     const B1 = indicatorSnapshot.line1!;
@@ -22,13 +24,22 @@ export class BB_Strategy implements IStrategy {
     const B4 = indicatorSnapshot.line4!;
     const B5 = indicatorSnapshot.line5!;
 
+    // Quy tac 1: Dong cua trong vung ngoai. Quy tac 2: Rut chan (Wick) vao vung ngoai nhung dong cua o vung trong
+    const isLongRule1 = (currClose >= B5 && currClose <= B4);
+    const isLongRule2 = (currLow <= B4 && currClose > B4 && currClose <= B3);
+    const isLongCandidate = isLongRule1 || isLongRule2;
+
+    const isShortRule1 = (currClose >= B2 && currClose <= B1);
+    const isShortRule2 = (currHigh >= B2 && currClose < B2 && currClose >= B3);
+    const isShortCandidate = isShortRule1 || isShortRule2;
+
     let signal: SignalSide = 'NONE';
     let armBounds = undefined;
     let entryTrigger = undefined;
     let cancelTrigger = undefined;
 
-    // LONG CANDIDATE: Candle A dng n?m trong B5 -> B4
-    if (currClose >= B5 && currClose <= B4) {
+    // LONG CANDIDATE
+    if (isLongCandidate) {
       signal = 'LONG';
       const triggerValue = B4 + (B3 - B4) * 0.10;
       
@@ -48,8 +59,8 @@ export class BB_Strategy implements IStrategy {
         value: 0
       };
     }
-    // SHORT CANDIDATE: Candle A dng n?m trong B2 -> B1
-    else if (currClose >= B2 && currClose <= B1) {
+    // SHORT CANDIDATE
+    else if (isShortCandidate) {
       signal = 'SHORT';
       const triggerValue = B2 - (B2 - B3) * 0.10;
       
