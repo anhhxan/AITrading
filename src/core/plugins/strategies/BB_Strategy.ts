@@ -36,7 +36,7 @@ export class BB_Strategy implements IStrategy {
     let signal: SignalSide = 'NONE';
     let armBounds = undefined;
     let entryTrigger = undefined;
-    let cancelTrigger = undefined;
+    let cancelBounds = undefined;
 
     // LONG CANDIDATE
     if (isLongCandidate) {
@@ -54,9 +54,9 @@ export class BB_Strategy implements IStrategy {
         upper: triggerValue
       };
       
-      cancelTrigger = {
-        type: 'OUT_OF_BOUNDS',
-        value: 0
+      cancelBounds = {
+        lower: B5,
+        upper: 999999999
       };
     }
     // SHORT CANDIDATE
@@ -75,9 +75,9 @@ export class BB_Strategy implements IStrategy {
         upper: 999999999
       };
       
-      cancelTrigger = {
-        type: 'OUT_OF_BOUNDS',
-        value: 0
+      cancelBounds = {
+        lower: 0,
+        upper: B1
       };
     }
 
@@ -89,8 +89,8 @@ export class BB_Strategy implements IStrategy {
       direction: signal,
       persistent: true,
       armBounds,
-      entryTrigger,
-      cancelTrigger
+      cancelBounds,
+      entryTrigger
     };
   }
 }

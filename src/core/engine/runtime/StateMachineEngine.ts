@@ -45,7 +45,8 @@ export class StateMachineEngine implements IEngine {
   private timeoutCounts: Map<string, number> = new Map();
   private activeSignals: Map<string, StrategySignalEvent> = new Map();
   private activePositions: Map<string, any> = new Map();
-  private signalSystemTimestamps: Map<string, number> = new Map(); // Kept for backwards compatibility if needed, but not used for business logic
+  private signalSystemTimestamps: Map<string, number> = new Map();
+  private armedSignals: Map<string, boolean> = new Map(); // Kept for backwards compatibility if needed, but not used for business logic
   private robotTimeframes: Map<string, string> = new Map();
   private intervalId: any;
 
@@ -113,6 +114,7 @@ export class StateMachineEngine implements IEngine {
     if (currentState === RobotState.WAIT_SIGNAL || currentState === RobotState.WAIT_CANDLE_B_CONFIRMATION) {
       this.states.set(robotId, RobotState.WAIT_CANDLE_B_CONFIRMATION);
       this.activeSignals.set(robotId, event);
+        this.armedSignals.set(robotId, false);
       this.timeoutCounts.set(robotId, 0); // Reset timeout
       // signalSystemTimestamps is no longer used for business logic, relying on event.payload.barTimestamp
       await this.persistState(robotId, RobotState.WAIT_CANDLE_B_CONFIRMATION);
@@ -146,10 +148,11 @@ export class StateMachineEngine implements IEngine {
       const currentPrice = event.price;
       const trigger = activeSignal.entryTrigger;
       const armBounds = (activeSignal as any).armBounds;
+      const cancelBounds = (activeSignal as any).cancelBounds;
       
       let isCancelled = false;
-      if (armBounds) {
-          if (currentPrice < armBounds.lower || currentPrice > armBounds.upper) {
+      if (cancelBounds) {
+          if (currentPrice < cancelBounds.lower || currentPrice > cancelBounds.upper) {
               isCancelled = true;
           }
       }
@@ -158,7 +161,9 @@ export class StateMachineEngine implements IEngine {
          this.states.set(robotId, RobotState.WAIT_SIGNAL);
          await this.persistState(robotId, RobotState.WAIT_SIGNAL);
          this.activeSignals.delete(robotId);
+         this.armedSignals.delete(robotId);
          this.signalSystemTimestamps.delete(robotId);
+            this.armedSignals.delete(robotId);
          
          try {
              const { getSupabaseAdmin } = require('../../../lib/supabase');
@@ -176,15 +181,27 @@ export class StateMachineEngine implements IEngine {
          return;
       }
 
+      // Check if price enters ARM ZONE
+      let isArmed = this.armedSignals.get(robotId) || false;
+      if (!isArmed && armBounds) {
+          if (currentPrice >= armBounds.lower && currentPrice <= armBounds.upper) {
+              isArmed = true;
+              this.armedSignals.set(robotId, true);
+              console.log(`[StateMachineEngine] SIGNAL ARMED for ${robotId} at price ${currentPrice}`);
+          }
+      }
+
       let isTriggered = false;
       
-      if (trigger) {
+      // ONLY trigger if Armed
+      if (isArmed && trigger) {
         if (currentPrice >= trigger.lower && currentPrice <= trigger.upper) {
           isTriggered = true;
         }
       }
       
       if (isTriggered) {
+        this.armedSignals.delete(robotId);
         const trace = EventFactory.createTrace(
           activeSignal.trace.correlationId,
           event.eventId,
@@ -352,6 +369,7 @@ export class StateMachineEngine implements IEngine {
             this.states.set(robotId, RobotState.WAIT_SIGNAL);
             await this.persistState(robotId, RobotState.WAIT_SIGNAL);
             this.signalSystemTimestamps.delete(robotId);
+            this.armedSignals.delete(robotId);
             
             const trace = EventFactory.createTrace(
               activeSignal.trace.correlationId,
@@ -414,5 +432,6 @@ export class StateMachineEngine implements IEngine {
     this.status = 'STOPPED';
   }
 }
+
 
 
