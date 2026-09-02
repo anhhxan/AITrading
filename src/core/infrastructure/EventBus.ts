@@ -188,7 +188,7 @@ export class EventBus {
           payload: event,
           timestamp: event.timestamp
         });
-        if (error) {
+        console.log('[EventBus] Insert error:', error); if (error) {
           console.error(`[EventBus] Persistence ERROR for event ${event.eventType} (seq: ${event.trace.sequence}):`, error);
         }
       } catch (err) {
