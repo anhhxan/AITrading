@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { Bot, ArrowUp, ArrowDown, Archive } from 'lucide-react'
 import { updateRobotOrdersAction, archiveRobotAction } from './actions'
 
-export default function RobotListTable({ robots, pnlData }: { robots: any[], pnlData: Record<string, number> }) {
+export default function RobotListTable({ robots, pnlData, activePositions = {} }: { robots: any[], pnlData: Record<string, number>, activePositions?: Record<string, { side: string, unrealized_pnl: number }> }) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
 
   const handleSwap = async (currentIndex: number, direction: 'up' | 'down') => {
@@ -125,10 +125,15 @@ export default function RobotListTable({ robots, pnlData }: { robots: any[], pnl
                         <Bot size={16} />
                       </div>
                       <div>
-                        <div className="font-semibold text-slate-800">
+                        <div className="font-semibold text-slate-800 flex items-center gap-2">
                           <Link href={`/dashboard/robots/${robot.id}`} className="hover:underline hover:text-blue-600">
                             {robot.name}
                           </Link>
+                          {activePositions[robot.id] && (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${activePositions[robot.id].side === 'LONG' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                              {activePositions[robot.id].side}
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-slate-500 mt-0.5">{robot.slug} • {robot.timeframe}</div>
                       </div>

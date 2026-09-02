@@ -18,11 +18,13 @@ export default async function RobotsPage() {
   // Safely filter out archived robots (in memory, to prevent crashes if column doesn't exist yet)
   const robots = (allRobots || []).filter(r => r.is_archived !== true)
 
-  // Fetch PnL data
+  // Fetch PnL and Active Positions
   let pnlData: Record<string, number> = {}
+  let activePositions: Record<string, { side: string, unrealized_pnl: number }> = {}
   
   if (robots && robots.length > 0) {
     const robotIds = robots.map(r => r.id)
+    
     const { data: trades } = await supabase
       .from('trade_history')
       .select('robot_id, pnl')
@@ -32,6 +34,19 @@ export default async function RobotsPage() {
       trades.forEach(t => {
         if (!pnlData[t.robot_id]) pnlData[t.robot_id] = 0;
         pnlData[t.robot_id] += (t.pnl || 0);
+      });
+    }
+
+    const { data: positions } = await supabase
+      .from('active_positions')
+      .select('robot_id, side, unrealized_pnl')
+      .in('robot_id', robotIds)
+    
+    if (positions) {
+      positions.forEach(p => {
+        activePositions[p.robot_id] = { side: p.side, unrealized_pnl: p.unrealized_pnl || 0 };
+        if (!pnlData[p.robot_id]) pnlData[p.robot_id] = 0;
+        pnlData[p.robot_id] += (p.unrealized_pnl || 0);
       });
     }
   }
@@ -58,16 +73,16 @@ export default async function RobotsPage() {
             <Plus size={24} className="text-slate-400" />
           </div>
           <h3 className="text-lg font-medium text-slate-900 mb-1">No robots found</h3>
-          <p className="text-slate-500 mb-6 max-w-sm mx-auto">Get started by creating your first trading robot to automate your strategies.</p>
+          <p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto">Get started by creating your first trading robot to automate your strategies.</p>
           <Link 
             href="/dashboard/robots/new" 
-            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors bg-indigo-600 text-white hover:bg-indigo-700 h-10 py-2 px-4"
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors bg-blue-600 text-white hover:bg-blue-700 h-10 py-2 px-4"
           >
-            Create your first robot
+            Create Robot
           </Link>
         </div>
       ) : (
-        <RobotListTable robots={robots} pnlData={pnlData} />
+        <RobotListTable robots={robots} pnlData={pnlData} activePositions={activePositions} />
       )}
     </div>
   );
