@@ -12,12 +12,26 @@ export class PaperPositionTracker implements IEngine {
   
   // IMMUTABLE SNAPSHOT STATE (Position Context)
   private positionContexts: Map<string, any> = new Map();
+  // IN-MEMORY ACTIVE POSITIONS
+  private activePositions: Map<string, any> = new Map();
 
   public async initialize(): Promise<void> {
     this.status = 'STARTING';
     
+    // Load existing active positions into memory on startup
+    try {
+      const { data: positions } = await getSupabaseAdmin().from('active_positions').select('*');
+      if (positions) {
+        for (const pos of positions) {
+          this.activePositions.set(pos.robot_id, pos);
+        }
+      }
+    } catch (err) {
+      console.error('[PaperPositionTracker] Failed to load active positions on startup:', err);
+    }
+
     this.unsubs.push(coreEventBus.subscribe('POSITION_OPENED_EVENT', async (e: any) => {
-       // Save context securely by robot_id (or position id if we had it, but Paper limits to 1 per robot for now)
+       // Save context securely by robot_id
        this.positionContexts.set(e.robotId, {
          executionSymbol: e.symbol,
          tradingViewSymbol: e.tradingViewSymbol,
@@ -25,22 +39,58 @@ export class PaperPositionTracker implements IEngine {
          strategyId: e.strategyId,
          indicatorSnapshot: e.indicatorSnapshot
        });
+       // Add to active memory tracking
+       this.activePositions.set(e.robotId, {
+         robot_id: e.robotId,
+         symbol: e.symbol,
+         side: e.side,
+         quantity: e.quantity,
+         entry_price: e.entryPrice,
+         stop_loss_price: e.stopLoss,
+         take_profit_price: e.takeProfit,
+         leverage: e.leverage
+       });
     }));
 
-    this.unsubs.push(coreEventBus.subscribe('CANDLE_CLOSED', async (e: CandleClosedEvent) => {
-       await this.handleCandleClosed(e);
+    // Listen to REALTIME prices for SL/TP evaluation
+    this.unsubs.push(coreEventBus.subscribe('REALTIME_PRICE_EVENT', async (e: any) => {
+       await this.handleRealtimePrice(e);
     }));
 
     this.status = 'READY';
   }
 
-  private async handleCandleClosed(event: CandleClosedEvent) {
-    const supabase = getSupabaseAdmin();
+  private async handleRealtimePrice(event: any) {
+    if (event.price <= 0 || event.eventTimestamp <= 0) return;
     const robotId = event.robotId;
-    const candle = event.candle;
+    
+    const position = this.activePositions.get(robotId);
+    if (!position) return; // No active position
 
+    const currentPrice = event.price;
+    let isTP = false;
+    let isSL = false;
+
+    if (position.side === 'LONG') {
+      if (currentPrice >= position.take_profit_price) isTP = true;
+      if (currentPrice <= position.stop_loss_price) isSL = true;
+    } else if (position.side === 'SHORT') {
+      if (currentPrice <= position.take_profit_price) isTP = true;
+      if (currentPrice >= position.stop_loss_price) isSL = true;
+    }
+
+    if (!isTP && !isSL) return; // No exit condition hit
+
+    // Remove from memory immediately to prevent double-processing on next tick
+    this.activePositions.delete(robotId);
+
+    const closeReason = isTP ? 'TAKE_PROFIT' : 'STOP_LOSS';
+    const exitPrice = currentPrice; // Using exact trigger price
+    const quantity = position.quantity;
+    const entryPrice = position.entry_price;
+
+    const supabase = getSupabaseAdmin();
     try {
-      // 1. Verify robot is in PAPER mode
       const { data: robot, error: robotErr } = await supabase
         .from('robots')
         .select('trading_mode, paper_balance')
@@ -48,45 +98,9 @@ export class PaperPositionTracker implements IEngine {
         .single();
         
       if (robotErr || !robot) return;
-      if (robot.trading_mode !== 'PAPER') return; // SAFETY: PAPER ONLY
+      if (robot.trading_mode !== 'PAPER') return;
 
-      // 2. Query active_positions
-      const { data: positions, error: posErr } = await supabase
-        .from('active_positions')
-        .select('*')
-        .eq('robot_id', robotId);
-        
-      if (posErr || !positions || positions.length === 0) return;
-      
-      const position = positions[0]; // Assuming 1 position max per robot for now
-
-      // 3. Evaluate TP / SL
-      let isTP = false;
-      let isSL = false;
-
-      if (position.side === 'LONG') {
-        if (candle.high >= position.take_profit_price) isTP = true;
-        if (candle.low <= position.stop_loss_price) isSL = true;
-      } else if (position.side === 'SHORT') {
-        if (candle.low <= position.take_profit_price) isTP = true;
-        if (candle.high >= position.stop_loss_price) isSL = true;
-      }
-
-      // 4. Handle Double-hit (AMBIGUOUS)
-      if (isTP && isSL) {
-        console.warn(`[PaperPositionTracker] AMBIGUOUS double-hit for ${robotId} on candle ${candle.timestamp}. Ignoring.`);
-        return;
-      }
-
-      if (!isTP && !isSL) return; // No exit condition hit
-
-      // 5. Exit condition met
-      const closeReason = isTP ? 'TAKE_PROFIT' : 'STOP_LOSS';
-      const exitPrice = isTP ? position.take_profit_price : position.stop_loss_price;
-      const quantity = position.quantity;
-      const entryPrice = position.entry_price;
-
-      // 6. Compute P&L
+      // Compute P&L
       let realizedPnl = 0;
       if (position.side === 'LONG') {
         realizedPnl = (exitPrice - entryPrice) * quantity;
@@ -96,17 +110,8 @@ export class PaperPositionTracker implements IEngine {
       
       const newBalance = Number(robot.paper_balance) + realizedPnl;
 
-      // 7. Execute Atomicity / Compensating actions
-      // A. Delete active_position
-      const { error: delErr } = await supabase
-        .from('active_positions')
-        .delete()
-        .eq('id', position.id);
-
-      if (delErr) {
-        console.error(`[PaperPositionTracker] Failed to delete position ${position.id}:`, delErr);
-        return; // Stop here, idempotency is preserved since position remains
-      }
+      // Delete active_position
+      await supabase.from('active_positions').delete().eq('robot_id', robotId);
 
       // Restore snapshot context securely
       const ctx = this.positionContexts.get(robotId) || {
@@ -117,10 +122,8 @@ export class PaperPositionTracker implements IEngine {
          indicatorSnapshot: {}
       };
 
-      // B. Insert trade_history
-      const { error: histErr } = await supabase
-        .from('trade_history')
-        .insert({
+      // Insert trade_history
+      await supabase.from('trade_history').insert({
           robot_id: robotId,
           action: position.side === 'LONG' ? 'SELL' : 'BUY',
           side: position.side,
@@ -136,31 +139,13 @@ export class PaperPositionTracker implements IEngine {
           timeframe: ctx.timeframe,
           strategy_id: ctx.strategyId,
           indicator_snapshot: ctx.indicatorSnapshot
-        });
+      });
 
-      if (histErr) {
-         console.error(`[PaperPositionTracker] Failed to insert trade_history for ${robotId}:`, histErr);
-         // Position was deleted but history failed. In a true transactional DB we'd rollback.
-         // Without RPC, we just log. The position is closed.
-      }
+      // Update paper_balance
+      await supabase.from('robots').update({ paper_balance: newBalance }).eq('id', robotId);
 
-      // C. Update paper_balance
-      const { error: balErr } = await supabase
-        .from('robots')
-        .update({ paper_balance: newBalance })
-        .eq('id', robotId);
-        
-      if (balErr) {
-        console.error(`[PaperPositionTracker] Failed to update paper_balance for ${robotId}:`, balErr);
-      }
-
-      // 8. Publish POSITION_CLOSED_EVENT
-      const trace = EventFactory.createTrace(
-        event.trace.correlationId,
-        event.eventId,
-        this.engineId,
-        event.trace.sequence
-      );
+      // Publish POSITION_CLOSED_EVENT
+      const trace = EventFactory.createTrace(event.trace?.correlationId || 'sl-tp-'+Date.now(), event.eventId || 'sl-tp-id', this.engineId, Date.now());
 
       const closedEvent = EventFactory.createEvent(
         'POSITION_CLOSED_EVENT',
@@ -176,11 +161,11 @@ export class PaperPositionTracker implements IEngine {
         }
       );
 
-      console.log(`[PaperPositionTracker] Position closed for ${robotId}. Reason: ${closeReason}. PNL: ${realizedPnl}`);
+      console.log([PaperPositionTracker] Position closed for . Reason: . PNL: );
       await coreEventBus.publish(closedEvent as any);
 
     } catch (e: any) {
-        console.error('[PaperPositionTracker] EXCEPTION:', e.message);
+        console.error('[PaperPositionTracker] EXCEPTION in exit processing:', e.message);
     }
   }
 

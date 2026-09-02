@@ -44,7 +44,7 @@ export class BB_Strategy implements IStrategy {
       const triggerValue = B4 + (B3 - B4) * 0.10;
       
       armBounds = {
-        lower: B5,
+        lower: B4,
         upper: B3
       };
 
@@ -66,7 +66,7 @@ export class BB_Strategy implements IStrategy {
       
       armBounds = {
         lower: B3,
-        upper: B1
+        upper: B2
       };
 
       entryTrigger = {
