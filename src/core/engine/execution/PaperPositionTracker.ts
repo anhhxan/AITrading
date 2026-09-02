@@ -161,7 +161,7 @@ export class PaperPositionTracker implements IEngine {
         }
       );
 
-      console.log([PaperPositionTracker] Position closed for . Reason: . PNL: );
+      console.log(`[PaperPositionTracker] Position closed for ${robotId}. Reason: ${closeReason}. PNL: ${realizedPnl}`);
       await coreEventBus.publish(closedEvent as any);
 
     } catch (e: any) {
