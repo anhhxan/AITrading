@@ -45,6 +45,7 @@ export class StateMachineEngine implements IEngine {
   private timeoutCounts: Map<string, number> = new Map();
   private activeSignals: Map<string, StrategySignalEvent> = new Map();
   private activePositions: Map<string, any> = new Map();
+  private pendingReversalSignals: Map<string, StrategySignalEvent> = new Map();
   private signalSystemTimestamps: Map<string, number> = new Map();
   private armedSignals: Map<string, boolean> = new Map(); // Kept for backwards compatibility if needed, but not used for business logic
   private robotTimeframes: Map<string, string> = new Map();
@@ -106,7 +107,19 @@ export class StateMachineEngine implements IEngine {
     const currentState = this.states.get(robotId) || RobotState.WAIT_SIGNAL;
     
     if (currentState === RobotState.POSITION_OPEN) {
-      console.log(`[StateMachineEngine] POSITION_ALREADY_OPEN for robot ${robotId}: Ignoring new signal.`);
+      const activePos = this.activePositions.get(robotId);
+      if (activePos && activePos.side !== event.direction) {
+        console.log(`[StateMachineEngine] REVERSAL DETECTED for ${robotId}. Open pos is ${activePos.side}, new signal is ${event.direction}. Queueing close.`);
+        this.pendingReversalSignals.set(robotId, event);
+        
+        const trace = EventFactory.createTrace(event.trace.correlationId, 'rev-close', this.engineId, event.trace.sequence);
+        const closeEvent = EventFactory.createEvent('FORCE_CLOSE_POSITION_EVENT', robotId, event.configVersion || 1, trace, {
+            reason: 'REVERSAL'
+        });
+        await coreEventBus.publish(closeEvent as any);
+      } else {
+        console.log(`[StateMachineEngine] POSITION_ALREADY_OPEN (Same side) for robot ${robotId}: Ignoring new signal.`);
+      }
       return;
     }
     
@@ -181,15 +194,19 @@ export class StateMachineEngine implements IEngine {
          return;
       }
 
-      // Check if price enters ARM ZONE
-      let isArmed = this.armedSignals.get(robotId) || false;
-      if (!isArmed && armBounds) {
-          if (currentPrice >= armBounds.lower && currentPrice <= armBounds.upper) {
-              isArmed = true;
-              this.armedSignals.set(robotId, true);
-              console.log(`[StateMachineEngine] SIGNAL ARMED for ${robotId} at price ${currentPrice}`);
-          }
-      }
+        // Check if price enters ARM ZONE
+        let isArmed = this.armedSignals.get(robotId) || false;
+        if (!isArmed && armBounds) {
+            if (currentPrice >= armBounds.lower && currentPrice <= armBounds.upper) {
+                isArmed = true;
+                this.armedSignals.set(robotId, true);
+                console.log(`[StateMachineEngine] SIGNAL ARMED for ${robotId} at price ${currentPrice}`);
+                try {
+                   const { getSupabaseAdmin } = require('../../../lib/supabase');
+                   getSupabaseAdmin().from('active_setups').update({ is_armed: true }).eq('robot_id', robotId).then(() => {});
+                } catch(e) {}
+            }
+        }
 
       let isTriggered = false;
       
@@ -264,38 +281,48 @@ export class StateMachineEngine implements IEngine {
     }
   }
 
-  private async handlePositionClosed(event: PositionClosedEvent) {
-      this.activePositions.delete(event.robotId);
-    const robotId = event.robotId;
-    const currentState = this.states.get(robotId);
-    
-    // Valid transition: POSITION_OPEN -> WAIT_SIGNAL
-    if (currentState === RobotState.POSITION_OPEN) {
-      this.states.set(robotId, RobotState.WAIT_SIGNAL);
-      await this.persistState(robotId, RobotState.WAIT_SIGNAL);
+    private async handlePositionClosed(event: PositionClosedEvent) {
+        this.activePositions.delete(event.robotId);
+      const robotId = event.robotId;
+      const currentState = this.states.get(robotId);
       
-      const trace = EventFactory.createTrace(
-        event.trace.correlationId,
-        event.eventId,
-        this.engineId,
-        event.trace.sequence
-      );
+      // Valid transition: POSITION_OPEN -> WAIT_SIGNAL
+      if (currentState === RobotState.POSITION_OPEN) {
+        this.states.set(robotId, RobotState.WAIT_SIGNAL);
+        await this.persistState(robotId, RobotState.WAIT_SIGNAL);
+        
+        const trace = EventFactory.createTrace(
+          event.trace.correlationId,
+          event.eventId,
+          this.engineId,
+          event.trace.sequence
+        );
+  
+        const transitionEvent = EventFactory.createEvent(
+          'STATE_TRANSITION_EVENT',
+          robotId, event.configVersion || 1,
+          trace,
+          {
+            previousState: RobotState.POSITION_OPEN,
+            newState: RobotState.WAIT_SIGNAL,
+            reason: 'POSITION_CLOSED'
+          }
+        );
+        await coreEventBus.publish(transitionEvent as any);
 
-      const transitionEvent = EventFactory.createEvent(
-        'STATE_TRANSITION_EVENT',
-        robotId, event.configVersion || 1,
-        trace,
-        {
-          previousState: RobotState.POSITION_OPEN,
-          newState: RobotState.WAIT_SIGNAL,
-          reason: 'POSITION_CLOSED'
+        // Check if there is a pending reversal signal
+        const pendingSignal = this.pendingReversalSignals.get(robotId);
+        if (pendingSignal) {
+            console.log(`[StateMachineEngine] Processing PENDING REVERSAL signal for ${robotId}`);
+            this.pendingReversalSignals.delete(robotId);
+            // Re-feed the signal now that state is WAIT_SIGNAL
+            await this.handleSignalDetected(pendingSignal);
         }
-      );
-      await coreEventBus.publish(transitionEvent as any);
-    } else {
-      console.warn(`[StateMachineEngine] REJECTED POSITION_CLOSED_EVENT for ${robotId}. Invalid state: ${currentState}`);
+
+      } else {
+        console.warn(`[StateMachineEngine] REJECTED POSITION_CLOSED_EVENT for ${robotId}. Invalid state: ${currentState}`);
+      }
     }
-  }
 
   private async handleRiskRejected(event: any) {
     const robotId = event.robotId;

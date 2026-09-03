@@ -40,7 +40,7 @@ export class RobotRuntime {
         // Hydration: Source of Truth is now active_setups (Phase 3.7)
         const { data: activeSetup, error: setupErr } = await supabase
             .from('active_setups')
-            .select('setup_id, state, direction, trigger_price, stop_price, snapshot')
+            .select('setup_id, state, direction, trigger_price, stop_price, snapshot, is_armed')
             .eq('robot_id', this.robotId)
             .single(); // Assuming one active setup per robot
 
@@ -54,7 +54,8 @@ export class RobotRuntime {
                 direction: activeSetup.direction,
                 trigger: activeSetup.trigger_price,
                 stop: activeSetup.stop_price,
-                snapshot: activeSetup.snapshot
+                snapshot: activeSetup.snapshot,
+                is_armed: activeSetup.is_armed || false
             };
         } else {
             trueState = configData.robots.current_state || 'IDLE';
@@ -87,6 +88,9 @@ export class RobotRuntime {
         if ((trueState === 'WAIT_CANDLE_B_CONFIRMATION' || trueState === 'READY_TO_ENTER') && trueActiveSignal) {
             (this.stateMachine as any).activeSignals.set(this.robotId, trueActiveSignal);
             (this.riskEngine as any).activeSignals.set(this.robotId, trueActiveSignal);
+            if (trueActiveSignal.is_armed) {
+                (this.stateMachine as any).armedSignals.set(this.robotId, trueActiveSignal.is_armed);
+            }
         }
         
         // Start Realtime Price Feed

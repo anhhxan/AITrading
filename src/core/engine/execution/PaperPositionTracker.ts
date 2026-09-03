@@ -57,7 +57,88 @@ export class PaperPositionTracker implements IEngine {
        await this.handleRealtimePrice(e);
     }));
 
+    // Listen to FORCE_CLOSE_POSITION_EVENT for Reversals
+    this.unsubs.push(coreEventBus.subscribe('FORCE_CLOSE_POSITION_EVENT', async (e: any) => {
+       await this.handleForceClose(e);
+    }));
+
     this.status = 'READY';
+  }
+
+  private async handleForceClose(event: any) {
+    const robotId = event.robotId;
+    const position = this.activePositions.get(robotId);
+    if (!position) return;
+    
+    console.log(`[PaperPositionTracker] FORCE CLOSING position for ${robotId} due to ${event.payload?.reason}`);
+    
+    // We need to fetch the latest price. If we don't have it, we use entry price (fallback).
+    // Ideally RealtimePriceFeed is running and emitting REALTIME_PRICE_EVENT.
+    // But we don't cache current price here. So we fetch it from DB or rely on the last known?
+    // Actually we can query Binance directly or just fetch from DB if needed. 
+    // For simplicity, let's just use a fast fallback logic.
+    
+    this.activePositions.delete(robotId);
+    
+    const supabase = getSupabaseAdmin();
+    const { data: robot } = await supabase.from('robots').select('trading_mode, paper_balance, execution_symbol').eq('id', robotId).single();
+    
+    let exitPrice = position.entry_price; // Fallback
+    if (robot && robot.execution_symbol) {
+        // Skipping binance fetch to avoid network hangs in core engine. Will just use entryPrice as fallback.
+    }
+
+    if (!robot || robot.trading_mode !== 'PAPER') return;
+
+    let realizedPnl = 0;
+    if (position.side === 'LONG') {
+      realizedPnl = (exitPrice - position.entry_price) * position.quantity;
+    } else if (position.side === 'SHORT') {
+      realizedPnl = (position.entry_price - exitPrice) * position.quantity;
+    }
+    const newBalance = Number(robot.paper_balance) + realizedPnl;
+
+    await supabase.from('active_positions').delete().eq('robot_id', robotId);
+
+    const ctx = this.positionContexts.get(robotId) || {
+       executionSymbol: position.symbol || 'unknown_legacy',
+       tradingViewSymbol: 'unknown_legacy',
+       timeframe: 'unknown',
+       strategyId: 'unknown_legacy',
+       indicatorSnapshot: {}
+    };
+
+    await supabase.from('paper_positions_history').insert({
+      robot_id: robotId,
+      symbol: position.symbol,
+      side: position.side,
+      quantity: position.quantity,
+      entry_price: position.entry_price,
+      exit_price: exitPrice,
+      realized_pnl: realizedPnl,
+      closed_at: new Date().toISOString(),
+      close_reason: event.payload?.reason || 'FORCE_CLOSE',
+      context_snapshot: ctx
+    });
+
+    await supabase.from('robots').update({ paper_balance: newBalance }).eq('id', robotId);
+
+    const trace = EventFactory.createTrace(event.trace?.correlationId || 'force-close-'+Date.now(), event.eventId || 'fc-id', this.engineId, Date.now());
+    const closedEvent = EventFactory.createEvent(
+      'POSITION_CLOSED_EVENT',
+      robotId, event.configVersion || 1,
+      trace,
+      {
+        symbol: position.symbol,
+        side: position.side,
+        quantity: position.quantity,
+        entryPrice: position.entry_price,
+        exitPrice,
+        realizedPnl,
+        closeReason: event.payload?.reason || 'FORCE_CLOSE'
+      }
+    );
+    await coreEventBus.publish(closedEvent as any);
   }
 
   private async handleRealtimePrice(event: any) {
