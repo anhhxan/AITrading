@@ -1,5 +1,5 @@
 import { BaseEvent, EventFactory } from "../../infrastructure/EventFactory";
-import { coreEventBus } from "../../infrastructure/EventBus";
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { PluginLoader } from "../runtime/PluginLoader";
 import { Candle, IIndicator } from "../../interfaces/PluginInterfaces";
 import { IEngine } from "../runtime/IEngine";

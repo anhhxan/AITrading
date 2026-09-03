@@ -1,5 +1,5 @@
 import { supabase } from '../../../lib/supabaseClient';
-import { coreEventBus } from '../../infrastructure/EventBus';
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { IEngine, EngineHealth } from '../runtime/IEngine';
 import { Clock } from '../../infrastructure/Clock';
 

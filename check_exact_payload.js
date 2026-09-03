@@ -3,10 +3,11 @@ require('dotenv').config({ path: '.env.local' });
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function check() {
-  const { data: logs } = await supabase
-    .from('signal_trace_events')
-    .select('bar_timestamp, strategy_result, strategy_status, adapter_status')
-    .eq('robot_id', '1ba05b33-0b3c-4838-9cbb-dfe8161895d9'); // paper 30m
-  console.log("30m", logs);
+  const { data: cmd } = await supabase
+    .from('robot_commands')
+    .select('*')
+    .eq('command_id', '96489a97-3506-4561-a727-f072b5a5a991')
+    .single();
+  console.log(cmd);
 }
 check();

@@ -1,5 +1,5 @@
 import { IEngine } from "./IEngine";
-import { coreEventBus } from "../../infrastructure/EventBus";
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { EventFactory } from "../../infrastructure/EventFactory";
 
 /**

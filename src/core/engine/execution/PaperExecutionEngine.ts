@@ -1,5 +1,5 @@
 import { IEngine } from '../runtime/IEngine';
-import { coreEventBus } from '../../infrastructure/EventBus';
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { TradePlanEvent } from '../risk/RiskEngine';
 import { getSupabaseAdmin } from '../../../lib/supabase';
 import { EventFactory } from '../../infrastructure/EventFactory';

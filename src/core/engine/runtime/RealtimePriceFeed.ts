@@ -1,6 +1,6 @@
 
 import { BaseEvent, EventFactory } from '../../infrastructure/EventFactory';
-import { coreEventBus } from '../../infrastructure/EventBus';
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { SequenceAuthority } from '../../infrastructure/SequenceAuthority';
 
 export interface RealtimePriceEvent extends BaseEvent {

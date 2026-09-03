@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { StateMachineEngine, RobotState, StateTransitionEvent } from '../StateMachineEngine';
-import { coreEventBus } from '../../../infrastructure/EventBus';
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { EventFactory } from '../../../infrastructure/EventFactory';
 
 describe('StateMachineEngine - Retracement Limit Fill Phase 14D', () => {

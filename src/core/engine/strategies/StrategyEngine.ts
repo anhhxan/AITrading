@@ -1,5 +1,5 @@
 import { BaseEvent, EventFactory } from "../../infrastructure/EventFactory";
-import { coreEventBus } from "../../infrastructure/EventBus";
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { PluginLoader } from "../runtime/PluginLoader";
 import { IStrategy } from "../../interfaces/PluginInterfaces";
 import { IEngine } from "../runtime/IEngine";
@@ -68,10 +68,33 @@ export class StrategyEngine implements IEngine {
   private async handleIndicatorUpdated(event: IndicatorUpdatedEvent) {
     const robotId = event.robotId;
     const strategy = this.robotConfig.get(robotId);
-    if (!strategy) return;
+    if (!strategy) {
+        console.error(`[StrategyEngine] CRITICAL: No strategy registered for robot ${robotId}. Config missing!`);
+        const barTimestamp = (event as any).barTimestamp || this.currentTimestamps.get(robotId);
+        if (barTimestamp && barTimestamp !== 'unknown') {
+            upsertSignalTrace({
+                robot_id: robotId,
+                bar_timestamp: barTimestamp,
+                strategy_status: 'ERROR',
+                strategy_result: 'NONE',
+                diagnostics: { error: 'Strategy Config Not Found in Memory' }
+            });
+        }
+        return;
+    }
 
     if ((event as any).candlePairValid === false) {
-       console.log(`[StrategyEngine] Skipped evaluation for ${robotId} due to INVALID candle pair (GAP).`);
+       console.warn(`[StrategyEngine] Skipped evaluation for ${robotId} due to INVALID candle pair (GAP).`);
+       const barTimestamp = (event as any).barTimestamp || this.currentTimestamps.get(robotId);
+       if (barTimestamp && barTimestamp !== 'unknown') {
+           upsertSignalTrace({
+               robot_id: robotId,
+               bar_timestamp: barTimestamp,
+               strategy_status: 'SKIPPED',
+               strategy_result: 'NONE',
+               diagnostics: { error: 'INVALID_CANDLE_PAIR_GAP' }
+           });
+       }
        return;
     }
 
@@ -220,4 +243,5 @@ export class StrategyEngine implements IEngine {
     this.status = 'STOPPED';
   }
 }
+
 

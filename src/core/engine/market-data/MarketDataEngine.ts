@@ -1,7 +1,7 @@
 import { IEngine, EngineHealth } from "../runtime/IEngine";
 import { IMarketDataProvider, OHLCV } from "../interfaces/IMarketDataProvider";
 import { MarketDataValidator } from "./MarketDataValidator";
-import { coreEventBus } from "../../infrastructure/EventBus";
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { EventFactory, DecisionTrace } from "../../infrastructure/EventFactory";
 import { Clock } from "../../infrastructure/Clock";
 

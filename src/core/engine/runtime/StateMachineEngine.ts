@@ -1,5 +1,5 @@
 import { BaseEvent, EventFactory } from "../../infrastructure/EventFactory";
-import { coreEventBus } from "../../infrastructure/EventBus";
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { IEngine } from "./IEngine";
 import { StrategySignalEvent } from "../strategies/StrategyEngine";
 import { getSupabaseAdmin } from "../../../lib/supabase";

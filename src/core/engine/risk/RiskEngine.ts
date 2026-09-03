@@ -1,6 +1,6 @@
 import { IEngine } from '../runtime/IEngine';
 import { BaseEvent, EventFactory } from '../../infrastructure/EventFactory';
-import { coreEventBus } from '../../infrastructure/EventBus';
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { StrategySignalEvent } from '../strategies/StrategyEngine';
 import { StateTransitionEvent, RobotState } from '../runtime/StateMachineEngine';
 import { calculateRiskPreview } from './RiskCalculator';

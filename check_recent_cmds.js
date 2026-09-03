@@ -1,0 +1,18 @@
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config({ path: '.env.local' });
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+async function check() {
+  const { data: cmds } = await supabase
+    .from('robot_commands')
+    .select('created_at, robot_id, status, result')
+    .gte('created_at', '2026-09-03T02:00:00Z')
+    .order('created_at', { ascending: false });
+    
+  console.log(`Commands: ${cmds.length}`);
+  if (cmds.length > 0) {
+    console.log(cmds[0]);
+  }
+}
+check();
