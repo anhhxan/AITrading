@@ -1,1 +1,0 @@
-const fs = require('fs'); const lines = fs.readFileSync('src/core/engine/runtime/RealtimePriceFeed.ts', 'utf8').split('\n'); fs.writeFileSync('src/core/engine/runtime/RealtimePriceFeed.ts', lines.map(line => line.replace(/ws-\\\\\\/g, 'ws-').replace(/ws-agg-\\\\\\/g, 'ws-agg-').replace(/\\\\\\$/g, '$')).join('\n'));
