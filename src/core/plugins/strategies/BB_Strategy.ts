@@ -56,7 +56,7 @@ export class BB_Strategy implements IStrategy {
       
       cancelBounds = {
         lower: B5,
-        upper: 999999999
+        upper: B2 // Cancel if price shoots up to B2, missing the dip
       };
     }
     // SHORT CANDIDATE
@@ -76,7 +76,7 @@ export class BB_Strategy implements IStrategy {
       };
       
       cancelBounds = {
-        lower: 0,
+        lower: B4, // Cancel if price drops to B4, missing the rally
         upper: B1
       };
     }

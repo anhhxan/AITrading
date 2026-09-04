@@ -96,7 +96,9 @@ export class StateMachineEngine implements IEngine {
 
   public registerRobot(robotId: string, timeframe: string = '1m') {
     this.robotTimeframes.set(robotId, timeframe.toLowerCase());
-    this.states.set(robotId, RobotState.WAIT_SIGNAL);
+    if (!this.states.has(robotId)) {
+        this.states.set(robotId, RobotState.WAIT_SIGNAL);
+    }
   }
 
   public async handleSignalDetected(event: StrategySignalEvent) {
@@ -355,12 +357,31 @@ export class StateMachineEngine implements IEngine {
   }
 
   private async checkTimeouts() {
+    if (this.status !== 'READY') return;
+
     const now = Date.now();
     for (const [robotId, state] of this.states.entries()) {
-      if (state === RobotState.WAIT_CANDLE_B_CONFIRMATION) {
+      if (state === RobotState.WAIT_CANDLE_B_CONFIRMATION || state === RobotState.READY_TO_ENTER) {
         const activeSignal = this.activeSignals.get(robotId);
         
-        if (activeSignal) {
+        if (!activeSignal) {
+            console.warn(`[StateMachineEngine] RECOVERY_CONTEXT_MISSING for ${robotId}. Forcing WAIT_SIGNAL.`);
+            this.states.set(robotId, RobotState.WAIT_SIGNAL);
+            await this.persistState(robotId, RobotState.WAIT_SIGNAL);
+            this.signalSystemTimestamps.delete(robotId);
+            this.armedSignals.delete(robotId);
+
+            const trace = EventFactory.createTrace('recovery-' + now, 'recovery-fail-safe', this.engineId, now);
+            const transitionEvent = EventFactory.createEvent('STATE_TRANSITION_EVENT', robotId, 1, trace, {
+                oldState: state,
+                newState: RobotState.WAIT_SIGNAL,
+                reason: 'RECOVERY_CONTEXT_MISSING'
+            });
+            await coreEventBus.publish(transitionEvent as any);
+            continue;
+        }
+
+        if (state === RobotState.WAIT_CANDLE_B_CONFIRMATION) {
             if ((activeSignal as any).persistent) continue;
           const timeframe = this.robotTimeframes.get(robotId);
           if (!timeframe) {
