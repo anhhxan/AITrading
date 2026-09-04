@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
 import crypto from 'crypto';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ robotId: string }> | { robotId: string } }) {
@@ -26,7 +26,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     const proxyToken = process.env.CLOUDFLARE_PROXY_TOKEN || '';
     const targetUrl = `${proxyBaseUrl}/tv/${robotId}/${proxyToken}`;
     
-    // Webhook auth secret in case we still need it (worker usually injects it but just in case)
     const secret = process.env.TV_WEBHOOK_SECRET || '';
 
     const payload = {
@@ -38,7 +37,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         tvSymbol: robot.trading_view_symbol,
         timeframe: robot.timeframe,
         open: 100, high: 101, low: 99, close: 100, volume: 1,
-        indicator: {}
+        indicator: {},
+        secret: secret
     };
 
     const startTime = Date.now();
@@ -66,28 +66,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     
     const duration = Date.now() - startTime;
     
-    // Wait and verify if it reached Supabase
     let persistenceResult = 'NOT_FOUND';
     let executionStatus = 'UNKNOWN';
     let retries = 0;
     
-    while (retries < 4) {
+    while (retries < 10) {
         await new Promise(r => setTimeout(r, 1000));
         
         const { data: events, error } = await supabase
             .from('core_events')
-            .select('payload')
+            .select('event_type, payload')
             .eq('robot_id', robotId)
-            .eq('event_type', 'TEST_SIGNAL')
+            .eq('correlation_id', testId)
             .order('created_at', { ascending: false })
-            .limit(10);
+            .limit(20);
             
         if (!error && events && events.length > 0) {
-            const match = events.find((e: any) => e.payload && e.payload.testId === testId);
-            if (match) {
-                persistenceResult = 'SUCCESS';
-                executionStatus = match.payload.execution_status || 'SKIPPED';
+            persistenceResult = 'SUCCESS';
+            
+            const eventTypes = events.map(e => e.event_type);
+            
+            if (eventTypes.includes('POSITION_OPENED_EVENT')) {
+                executionStatus = 'SUCCESS (Vє l?nh)';
                 break;
+            } else if (eventTypes.includes('TRADE_PLAN_EVENT')) {
+                executionStatus = 'TRADE_PLAN (ау duy?t)';
+                break;
+            } else if (eventTypes.includes('STATE_TRANSITION_EVENT')) {
+                executionStatus = 'READY_TO_ENTER';
+            } else if (eventTypes.includes('STRATEGY_SIGNAL_EVENT')) {
+                executionStatus = 'STRATEGY_PASS';
+            } else if (eventTypes.includes('REALTIME_PRICE_EVENT')) {
+                executionStatus = 'PROCESSING_TICKS';
+            } else {
+                executionStatus = 'RECEIVED';
             }
         }
         retries++;
@@ -107,4 +119,3 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         error: cfError || null
     });
 }
-
