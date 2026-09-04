@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { getOrCreateSimulatorRobot, resetSimulator, updateSimulatorConfig, sendSimulatedWebhook } from '@/app/actions/simulatorActions';
 import { createClient } from '@/lib/supabase/client';
+import { translateRobotState } from '@/lib/utils';
 
 export default function SimulatorPage() {
   const supabase = createClient();
@@ -207,7 +208,7 @@ export default function SimulatorPage() {
         <div>
           <div className="text-blue-300 text-sm font-bold tracking-widest">PAPER TRADING</div>
           <div className="text-2xl font-bold mt-1">{robot?.name || 'Loading...'}</div>
-          <div className="text-sm text-slate-400 mt-1">State: <span className="text-emerald-400 font-bold">{robot?.current_state || 'UNKNOWN'}</span></div>
+          <div className="text-sm text-slate-400 mt-1">State: <span className="text-emerald-400 font-bold">{translateRobotState(robot?.current_state)}</span></div>
         </div>
         <div className="flex gap-4 md:gap-8 text-right">
           <div>
@@ -427,3 +428,4 @@ export default function SimulatorPage() {
     </div>
   );
 }
+

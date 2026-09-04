@@ -5,6 +5,7 @@ import RobotControlPanel from './RobotControlPanel'
 import TradeHistoryFilter from './TradeHistoryFilter'
 import TestSignalButton from './TestSignalButton'
 import SignalPipelineMonitor from './SignalPipelineMonitor'
+import { translateRobotState } from '@/lib/utils'
 
 export default async function RobotDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
@@ -107,7 +108,7 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Engine State</p>
-                <p className="font-semibold text-indigo-600 min-w-0 break-words">{robot.current_state || 'UNKNOWN'}</p>
+                <p className="font-semibold text-indigo-600 min-w-0 break-words">{translateRobotState(robot.current_state)}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Trading Mode</p>
@@ -443,3 +444,4 @@ export default async function RobotDetailPage({ params }: { params: Promise<{ id
     </div>
   )
 }
+

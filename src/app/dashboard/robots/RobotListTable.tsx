@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { Bot, ArrowUp, ArrowDown, Archive } from 'lucide-react'
 import { updateRobotOrdersAction, archiveRobotAction } from './actions'
+import { translateRobotState } from '@/lib/utils'
 
 export default function RobotListTable({ robots, pnlData, activePositions = {} }: { robots: any[], pnlData: Record<string, number>, activePositions?: Record<string, { side: string, unrealized_pnl: number }> }) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
@@ -141,7 +142,7 @@ export default function RobotListTable({ robots, pnlData, activePositions = {} }
                   </td>
                   <td className="px-6 py-4">
                     {getStatusBadge(robot.status)}
-                    <div className="text-[10px] text-slate-500 mt-1">{robot.current_state || 'UNKNOWN'}</div>
+                    <div className="text-[10px] text-slate-500 mt-1 font-medium">{translateRobotState(robot.current_state)}</div>
                   </td>
                   <td className="px-6 py-4">
                     {getTradingBadge(robot.trading_enabled)}
