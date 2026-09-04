@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+ï»¿import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import crypto from 'crypto';
 
@@ -87,10 +87,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
             const eventTypes = events.map(e => e.event_type);
             
             if (eventTypes.includes('POSITION_OPENED_EVENT')) {
-                executionStatus = 'SUCCESS (Vô l?nh)';
+                executionStatus = 'SUCCESS (Vo lenh)';
                 break;
             } else if (eventTypes.includes('TRADE_PLAN_EVENT')) {
-                executionStatus = 'TRADE_PLAN (Ðã duy?t)';
+                executionStatus = 'TRADE_PLAN (Da duyet)';
                 break;
             } else if (eventTypes.includes('STATE_TRANSITION_EVENT')) {
                 executionStatus = 'READY_TO_ENTER';
