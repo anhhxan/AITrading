@@ -316,7 +316,7 @@ export class StateMachineEngine implements IEngine {
             console.log(`[StateMachineEngine] Processing PENDING REVERSAL signal for ${robotId}`);
             this.pendingReversalSignals.delete(robotId);
             // Re-feed the signal now that state is WAIT_SIGNAL
-            if (pendingSignal) await this.handleSignalDetected(pendingSignal);
+            await this.handleSignalDetected(pendingSignal as any);
         }
 
       } else {
