@@ -80,7 +80,7 @@ export class RiskEngine implements IEngine {
     this.robotConfigs.set(robotId, config);
   }
 
-  private async handleReadyToEnter(event: StateTransitionEvent) {
+  public async handleReadyToEnter(event: StateTransitionEvent) {
     const robotId = event.robotId;
     console.log('[RiskEngine] handleReadyToEnter called for', robotId);
     
@@ -191,7 +191,7 @@ export class RiskEngine implements IEngine {
     });
 
     console.log('[RiskEngine] Emitting TRADE_PLAN_EVENT for', robotId, 'posSize:', positionSize);
-    await coreEventBus.publish(tradePlan as any);
+    await coreEventBus.publish(tradePlan as any); return tradePlan;
   }
 
   public healthCheck(): any {

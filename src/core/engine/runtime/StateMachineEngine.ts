@@ -99,7 +99,7 @@ export class StateMachineEngine implements IEngine {
     this.states.set(robotId, RobotState.WAIT_SIGNAL);
   }
 
-  private async handleSignalDetected(event: StrategySignalEvent) {
+  public async handleSignalDetected(event: StrategySignalEvent) {
     console.log('[StateMachineEngine] handleSignalDetected:', event.eventType, event.direction);
     if (event.direction === 'NONE') return;
 
@@ -147,7 +147,7 @@ export class StateMachineEngine implements IEngine {
     }
   }
 
-  private async handleRealtimePrice(event: any) {
+  public async handleRealtimePrice(event: any) {
     if (event.price <= 0 || event.eventTimestamp <= 0) {
       return;
     }
@@ -190,7 +190,7 @@ export class StateMachineEngine implements IEngine {
              reason: 'CANCEL_TRIGGER_HIT',
              triggerPrice: currentPrice
          });
-         await coreEventBus.publish(transitionEvent as any);
+         await coreEventBus.publish(transitionEvent as any); return transitionEvent;
          return;
       }
 
@@ -242,7 +242,7 @@ export class StateMachineEngine implements IEngine {
             await getSupabaseAdmin().from('active_setups').delete().eq('robot_id', robotId);
         } catch(e) {}
 
-        await coreEventBus.publish(transitionEvent as any);
+        await coreEventBus.publish(transitionEvent as any); return transitionEvent;
         this.activeSignals.delete(robotId);
       }
     }
@@ -275,7 +275,7 @@ export class StateMachineEngine implements IEngine {
           reason: 'POSITION_OPENED'
         }
       );
-      await coreEventBus.publish(transitionEvent as any);
+      await coreEventBus.publish(transitionEvent as any); return transitionEvent;
     } else {
       console.warn(`[StateMachineEngine] REJECTED POSITION_OPENED_EVENT for ${robotId}. Invalid state: ${currentState}`);
     }
@@ -308,7 +308,7 @@ export class StateMachineEngine implements IEngine {
             reason: 'POSITION_CLOSED'
           }
         );
-        await coreEventBus.publish(transitionEvent as any);
+        await coreEventBus.publish(transitionEvent as any); return transitionEvent;
 
         // Check if there is a pending reversal signal
         const pendingSignal = this.pendingReversalSignals.get(robotId);
@@ -316,7 +316,7 @@ export class StateMachineEngine implements IEngine {
             console.log(`[StateMachineEngine] Processing PENDING REVERSAL signal for ${robotId}`);
             this.pendingReversalSignals.delete(robotId);
             // Re-feed the signal now that state is WAIT_SIGNAL
-            await this.handleSignalDetected(pendingSignal);
+            if (pendingSignal) await this.handleSignalDetected(pendingSignal);
         }
 
       } else {
@@ -350,7 +350,7 @@ export class StateMachineEngine implements IEngine {
           reason: 'RISK_REJECTED'
         }
       );
-      await coreEventBus.publish(transitionEvent as any);
+      await coreEventBus.publish(transitionEvent as any); return transitionEvent;
     }
   }
 
@@ -415,7 +415,7 @@ export class StateMachineEngine implements IEngine {
                 reason: 'TIMEOUT'
               }
             );
-            await coreEventBus.publish(transitionEvent as any);
+            await coreEventBus.publish(transitionEvent as any); return transitionEvent;
           }
         }
       }

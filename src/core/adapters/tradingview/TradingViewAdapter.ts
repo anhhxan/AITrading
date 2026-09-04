@@ -1,3 +1,4 @@
+import { SequenceAuthority } from '@/core/infrastructure/SequenceAuthority';
 import { getSupabaseAdmin } from '../../../lib/supabase';
 import { randomUUID } from 'crypto';
 import { EventFactory } from '../../infrastructure/EventFactory';
@@ -56,12 +57,10 @@ export interface ExpectedConfig {
 
 export class TradingViewAdapter {
   private configs: Map<string, ExpectedConfig> = new Map();
-  private sequences: Map<string, number> = new Map();
 
   // Register expected config (Web App Context)
   public registerConfig(robotId: string, config: ExpectedConfig) {
     this.configs.set(robotId, config);
-    this.sequences.set(robotId, 1);
   }
 
   // Canonicalize TradingView timeframe (e.g. "180" -> "3H")
@@ -288,7 +287,7 @@ export class TradingViewAdapter {
       });
     }
 
-    let seq = this.sequences.get(robotId) || 1;
+    let seq = SequenceAuthority.next(robotId);
     
     // To Event INDICATOR_UPDATED_EVENT tng `ng v>i kt qu c a IndicatorEngine
     const trace1 = EventFactory.createTrace(correlationId, 'webhook-' + randomUUID(), 'TradingViewAdapter', seq++);
@@ -311,7 +310,7 @@ export class TradingViewAdapter {
 
     console.log(`[TradingViewAdapter] Validation PASS. Generated CANDLE_CLOSED and INDICATOR_UPDATED_EVENT for ${robotId}.`);
     
-    this.sequences.set(robotId, seq);
+    
     
     return {
       accepted: true,

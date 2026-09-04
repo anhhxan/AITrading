@@ -1,5 +1,6 @@
 import { RuntimeManager } from './RuntimeManager';
 import { CommandPoller } from './CommandPoller';
+import { WorkerHttpServer } from './HttpServer';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
@@ -70,6 +71,12 @@ async function bootstrap() {
 
     const poller = new CommandPoller(runtimeManager);
     poller.start();
+
+    // Start HTTP Direct Server
+    const port = parseInt(process.env.PORT || '8080', 10);
+    const httpServer = new WorkerHttpServer(runtimeManager, poller);
+    httpServer.start(port);
+
     console.log(JSON.stringify({
         event: 'COMMAND_POLLER_STARTED',
         service: 'ai-trading-worker',
@@ -106,6 +113,7 @@ async function bootstrap() {
     process.on('SIGINT', () => {
         console.log('[Worker] Shutting down...');
         poller.stop();
+        httpServer.stop();
         ReconciliationJob.stop();
         process.exit(0);
     });

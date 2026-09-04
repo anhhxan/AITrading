@@ -2,16 +2,20 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { RuntimeManager } from './RuntimeManager';
 import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { upsertSignalTrace } from '@/lib/diagnostics';
+import { TradingPipeline } from '@/core/engine/pipeline/TradingPipeline';
 
 export class CommandPoller {
     private isPolling = false;
-    private currentDelay = 1000;
-    private readonly minDelay = 1000;
-    private readonly maxDelay = 2000;
+    private currentDelay = 30000;
+    private readonly minDelay = 30000;
+    private readonly maxDelay = 60000;
     private timer: NodeJS.Timeout | null = null;
     private supabase = getSupabaseAdmin();
+    private pipeline: TradingPipeline;
 
-    constructor(private runtimeManager: RuntimeManager) {}
+    constructor(private runtimeManager: RuntimeManager) {
+        this.pipeline = new TradingPipeline(runtimeManager);
+    }
 
     public start() {
         if (this.isPolling) return;
@@ -74,7 +78,7 @@ export class CommandPoller {
         }
     }
 
-    private async processCommand(cmd: any) {
+    public async processCommand(cmd: any) {
         try {
             if (cmd.command_type === 'START') {
                 await this.runtimeManager.getOrCreateRuntime(cmd.robot_id);
@@ -117,29 +121,18 @@ export class CommandPoller {
                     payload.previousPayload = lastCmd.result.payload || lastCmd.result; 
                 }
 
-                
-
-                const result = await this.runtimeManager.adapter.handleWebhook(payload, cmd.robot_id, cmd.correlation_id);
-                
-                if (!result.accepted) {
-                    await this.completeCommand(cmd.command_id, 'FAILED', { validationErrors: result.validationErrors });
-                    return;
-                }
-
                 if (payload.isTest) {
                     console.log(`[WORKER] TEST_ID=${payload.testId}`);
                     await this.completeCommand(cmd.command_id, 'SUCCEEDED', { ...payload, execution: 'SKIPPED' });
                     return;
                 }
 
-                if (result.events) {
-                    for (const ev of result.events) {
-                        await coreEventBus.publish(ev.eventInstance);
-                    }
+                const pipelineResult = await this.pipeline.processEntrySignal(cmd.robot_id, cmd.correlation_id, payload);
+                if (pipelineResult.status === 'ERROR') {
+                     await this.completeCommand(cmd.command_id, 'FAILED', { error: pipelineResult.error });
+                     return;
                 }
-
-                // Wait for execution to finish
-                await coreEventBus.waitForIdle(cmd.robot_id);
+                
                 await this.completeCommand(cmd.command_id, 'SUCCEEDED', payload);
             }
             else {

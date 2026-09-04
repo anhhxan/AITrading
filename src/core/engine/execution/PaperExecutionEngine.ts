@@ -20,7 +20,7 @@ export class PaperExecutionEngine implements IEngine {
     this.status = 'READY';
   }
 
-  private async handleTradePlan(event: TradePlanEvent) {
+  public async handleTradePlan(event: TradePlanEvent) {
     console.log(`[PAPER] EXECUTION_STARTED TEST_ID=${event.trace.correlationId} robot=${event.robotId}`);
     console.log(`[PAPER] EVENT PAYLOAD:`, JSON.stringify(event, null, 2));
     const supabase = getSupabaseAdmin();

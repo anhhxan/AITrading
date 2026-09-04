@@ -46,14 +46,14 @@ export class StrategyEngine implements IEngine {
     this.status = 'STARTING';
     
     this.unsubs.push(coreEventBus.subscribe('CANDLE_CLOSED', async (event: any) => {
-       this.currentPrices.set(event.robotId, event.candle.close);
-       this.currentHighs.set(event.robotId, event.candle.high);
-       this.currentLows.set(event.robotId, event.candle.low);
-       this.currentTimestamps.set(event.robotId, event.candle.timestamp);
+       this.updateCandleDirect(event);
     }));
 
     this.unsubs.push(coreEventBus.subscribe('INDICATOR_UPDATED', async (event: IndicatorUpdatedEvent) => {
-       await this.handleIndicatorUpdated(event);
+       const signalEvent = await this.evaluateDirect(event);
+       if (signalEvent) {
+           await coreEventBus.publish(signalEvent as any);
+       }
     }));
 
     this.status = 'READY';
@@ -65,7 +65,14 @@ export class StrategyEngine implements IEngine {
      this.robotConfig.set(robotId, instance);
   }
 
-  private async handleIndicatorUpdated(event: IndicatorUpdatedEvent) {
+  public updateCandleDirect(event: any) {
+     this.currentPrices.set(event.robotId, event.candle.close);
+     this.currentHighs.set(event.robotId, event.candle.high);
+     this.currentLows.set(event.robotId, event.candle.low);
+     this.currentTimestamps.set(event.robotId, event.candle.timestamp);
+  }
+
+  public async evaluateDirect(event: IndicatorUpdatedEvent): Promise<any> {
     const robotId = event.robotId;
     const strategy = this.robotConfig.get(robotId);
     if (!strategy) {
@@ -80,7 +87,7 @@ export class StrategyEngine implements IEngine {
                 diagnostics: { error: 'Strategy Config Not Found in Memory' }
             });
         }
-        return;
+        return null;
     }
 
     if ((event as any).candlePairValid === false) {
@@ -95,7 +102,7 @@ export class StrategyEngine implements IEngine {
                diagnostics: { error: 'INVALID_CANDLE_PAIR_GAP' }
            });
        }
-       return;
+       return null;
     }
 
     // Fallback to first indicator if explicitly named one isn't found
@@ -225,8 +232,16 @@ export class StrategyEngine implements IEngine {
          }
        );
        
-       await coreEventBus.publish(nextEvent as any);
+       return nextEvent;
     }
+    
+    return null;
+  }
+
+  private async handleIndicatorUpdated(event: IndicatorUpdatedEvent) {
+      // Logic has been moved to evaluateDirect.
+      // This is left just in case anything else tries to call it directly,
+      // but the event subscription above now calls evaluateDirect instead.
   }
 
   public healthCheck(): any {
