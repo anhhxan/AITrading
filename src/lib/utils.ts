@@ -6,12 +6,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function translateRobotState(state: string | null | undefined): string {
-  if (!state) return 'KH‘NG X¡C –?NH';
+  if (!state) return 'KH√îNG X√ÅC ƒê·ªäNH';
   switch (state) {
-    case 'WAIT_SIGNAL': return 'Ch? TÌn Hi?u (N?n A)';
-    case 'WAIT_CANDLE_B_CONFIRMATION': return 'Ph?c KÌch (Ch? D?i Gi·)';
-    case 'READY_TO_ENTER': return 'Ch? V‡o L?nh';
-    case 'POSITION_OPEN': return '–ang ‘m L?nh';
+    case 'WAIT_SIGNAL': return 'Ch·ªù T√≠n Hi·ªáu (N·∫øn A)';
+    case 'WAIT_CANDLE_B_CONFIRMATION': return 'N·∫øn B';
+    case 'READY_TO_ENTER': return 'Ch·ªù V√†o L·ªánh';
+    case 'POSITION_OPEN': return 'ƒêang √îm L·ªánh';
     default: return state;
   }
 }
