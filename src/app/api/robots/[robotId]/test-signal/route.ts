@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import crypto from 'crypto';
 
@@ -32,12 +32,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         isTest: true,
         isE2E: true,
         testId: testId,
-        event_type: 'TEST_SIGNAL',
-        timestamp: Date.now(),
         tvSymbol: robot.trading_view_symbol,
+        tvTickerId: robot.trading_view_symbol,
         timeframe: robot.timeframe,
-        open: 100, high: 101, low: 99, close: 100, volume: 1,
-        indicator: {},
+        barTimestamp: Date.now(),
+        open: 100, high: 106, low: 90, close: 105, volume: 1,
+        indicator: {
+            length: 20,
+            source: "close",
+            mult: 2,
+            mult2: 3
+        },
+        plots: {
+            B1: 130,
+            B2: 120,
+            B3: 110,
+            B4: 100,
+            B5: 90
+        },
         secret: secret
     };
 
@@ -69,15 +81,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
     let persistenceResult = 'NOT_FOUND';
     let executionStatus = 'UNKNOWN';
     let retries = 0;
+    let computedCorrelationId = testId;
     
     while (retries < 10) {
         await new Promise(r => setTimeout(r, 1000));
+        
+        if (computedCorrelationId === testId) {
+            const { data: cmd } = await supabase
+                .from('robot_commands')
+                .select('correlation_id')
+                .eq('command_type', 'TV_SIGNAL')
+                .contains('result', { testId: testId })
+                .single();
+            if (cmd && cmd.correlation_id) {
+                computedCorrelationId = cmd.correlation_id;
+            }
+        }
         
         const { data: events, error } = await supabase
             .from('core_events')
             .select('event_type, payload')
             .eq('robot_id', robotId)
-            .eq('correlation_id', testId)
+            .in('correlation_id', [testId, computedCorrelationId])
             .order('created_at', { ascending: false })
             .limit(20);
             
@@ -88,6 +113,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
             
             if (eventTypes.includes('POSITION_OPENED_EVENT')) {
                 executionStatus = 'SUCCESS (Vo lenh)';
+                break;
+            } else if (eventTypes.includes('ORDER_REJECTED_EVENT') || eventTypes.includes('EXECUTION_ERROR_EVENT')) {
+                executionStatus = 'FAILED (Loi lenh)';
+                break;
+            } else if (eventTypes.includes('RISK_REJECTED_EVENT')) {
+                executionStatus = 'RISK_REJECTED';
+                break;
+            } else if (eventTypes.includes('ORDER_CANCELLED_EVENT')) {
+                executionStatus = 'CANCELLED';
                 break;
             } else if (eventTypes.includes('TRADE_PLAN_EVENT')) {
                 executionStatus = 'TRADE_PLAN (Da duyet)';

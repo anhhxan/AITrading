@@ -123,33 +123,26 @@ export class CommandPoller {
 
                                 if (payload.isTest) {
                     console.log(`[WORKER] TEST_ID=${payload.testId}`);
-                    
-                    if (payload.isE2E) {
-                        console.log(`[WORKER] Running E2E Test Flow for ${cmd.robot_id}`);
+                }
+                
+                const actualCorrelationId = payload.testId || cmd.correlation_id;
+
+                const pipelineResult = await this.pipeline.processEntrySignal(cmd.robot_id, actualCorrelationId, payload);
+                if (pipelineResult.status === 'ERROR') {
+                     await this.completeCommand(cmd.command_id, 'FAILED', { error: pipelineResult.error });
+                     return;
+                }
+                
+                if (payload.isTest && payload.isE2E) {
+                    const currentState = this.runtimeManager.stateMachine.getState(cmd.robot_id);
+                    if (currentState === 'WAIT_CANDLE_B_CONFIRMATION' || currentState === 'READY_TO_ENTER') {
+                        console.log(`[WORKER] Pumping Synthetic Prices for E2E: ${cmd.robot_id}`);
                         const { EventFactory } = require('../core/infrastructure/EventFactory');
-                                                const { SequenceAuthority } = require('../core/infrastructure/SequenceAuthority');
+                        const { SequenceAuthority } = require('../core/infrastructure/SequenceAuthority');
                         
-                        let seq1 = SequenceAuthority.next(cmd.robot_id);
-                        const trace1 = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', seq1);
-                        const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', cmd.robot_id, 1, trace1, {
-                            candle: { close: 105, high: 106, low: 90, timestamp: Date.now() }
-                        });
-                        await coreEventBus.publish(candleEvent as any);
-
-                        const tvPayload = {
-                            barTimestamp: Date.now(),
-                            indicators: {
-                                'BB_MB': { ready: true, line1: 130, line2: 120, line3: 110, line4: 100, line5: 90 }
-                            }
-                        };
-                        let seq2 = SequenceAuthority.next(cmd.robot_id);
-                        const trace2 = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', seq2);
-                        const indicatorEvent = EventFactory.createEvent('INDICATOR_UPDATED', cmd.robot_id, 1, trace2, tvPayload);
-                        await coreEventBus.publish(indicatorEvent as any);
-
                         const sendPrice = async (price: number) => {
                             let pSeq = SequenceAuthority.next(cmd.robot_id);
-                            const pTrace = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', pSeq);
+                            const pTrace = EventFactory.createTrace(actualCorrelationId, 'test-e2e', 'TestRunner', pSeq);
                             const priceEvent = EventFactory.createEvent('REALTIME_PRICE_EVENT', cmd.robot_id, 1, pTrace, { price, eventTimestamp: Date.now() });
                             await coreEventBus.publish(priceEvent as any);
                             await new Promise(r => setTimeout(r, 1000));
@@ -160,16 +153,9 @@ export class CommandPoller {
                         await sendPrice(105); 
                         await sendPrice(103);
                         await sendPrice(101); // TRIGGER
+                    } else {
+                        console.log(`[WORKER] E2E Skipped Synthetic Prices because State is ${currentState}`);
                     }
-
-                    await this.completeCommand(cmd.command_id, 'SUCCEEDED', { ...payload, execution: 'SKIPPED' });
-                    return;
-                }
-
-                  const pipelineResult = await this.pipeline.processEntrySignal(cmd.robot_id, cmd.correlation_id, payload);
-                if (pipelineResult.status === 'ERROR') {
-                     await this.completeCommand(cmd.command_id, 'FAILED', { error: pipelineResult.error });
-                     return;
                 }
                 
                 await this.completeCommand(cmd.command_id, 'SUCCEEDED', payload);
