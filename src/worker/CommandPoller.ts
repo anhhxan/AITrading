@@ -121,13 +121,49 @@ export class CommandPoller {
                     payload.previousPayload = lastCmd.result.payload || lastCmd.result; 
                 }
 
-                if (payload.isTest) {
+                                if (payload.isTest) {
                     console.log(`[WORKER] TEST_ID=${payload.testId}`);
+                    
+                    if (payload.isE2E) {
+                        console.log(`[WORKER] Running E2E Test Flow for ${cmd.robot_id}`);
+                        const { EventFactory } = require('../core/infrastructure/EventFactory');
+                        const trace = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', 1);
+                        
+                        const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', cmd.robot_id, 1, trace, {
+                            candle: { close: 105, high: 106, low: 90, timestamp: Date.now() }
+                        });
+                        await coreEventBus.publish(candleEvent as any);
+
+                        const tvPayload = {
+                            barTimestamp: Date.now(),
+                            indicators: {
+                                'BB_MB': { ready: true, line1: 130, line2: 120, line3: 110, line4: 100, line5: 90 }
+                            }
+                        };
+                        const indicatorEvent = EventFactory.createEvent('INDICATOR_UPDATED', cmd.robot_id, 1, trace, tvPayload);
+                        await coreEventBus.publish(indicatorEvent as any);
+
+                        let seq = 2;
+                        const sendPrice = async (price: number) => {
+                            const pTrace = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', seq++);
+                            const priceEvent = EventFactory.createEvent('REALTIME_PRICE_EVENT', cmd.robot_id, 1, pTrace, { price, eventTimestamp: Date.now() });
+                            priceEvent.isInternalCausal = true; 
+                            await coreEventBus.publish(priceEvent as any);
+                            await new Promise(r => setTimeout(r, 1000));
+                        };
+
+                        await new Promise(r => setTimeout(r, 1000));
+                        await sendPrice(102); // ARM
+                        await sendPrice(105); 
+                        await sendPrice(103);
+                        await sendPrice(101); // TRIGGER
+                    }
+
                     await this.completeCommand(cmd.command_id, 'SUCCEEDED', { ...payload, execution: 'SKIPPED' });
                     return;
                 }
 
-                const pipelineResult = await this.pipeline.processEntrySignal(cmd.robot_id, cmd.correlation_id, payload);
+                  const pipelineResult = await this.pipeline.processEntrySignal(cmd.robot_id, cmd.correlation_id, payload);
                 if (pipelineResult.status === 'ERROR') {
                      await this.completeCommand(cmd.command_id, 'FAILED', { error: pipelineResult.error });
                      return;
@@ -156,3 +192,4 @@ export class CommandPoller {
         }).eq('command_id', commandId);
     }
 }
+

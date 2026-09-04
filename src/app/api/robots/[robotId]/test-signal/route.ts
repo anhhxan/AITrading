@@ -31,6 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
 
     const payload = {
         isTest: true,
+        isE2E: true,
         testId: testId,
         event_type: 'TEST_SIGNAL',
         timestamp: Date.now(),
@@ -106,3 +107,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         error: cfError || null
     });
 }
+
