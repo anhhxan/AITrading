@@ -3,7 +3,7 @@ require('dotenv').config({ path: '.env.local' });
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function run() {
-    const { data, error } = await supabase.from('robots').select('id, status, last_heartbeat_at').eq('status', 'RUNNING');
+    const { data, error } = await supabase.from('robots').select('id, status');
     if (error) console.error("Error:", error);
     else console.log(data);
 }
