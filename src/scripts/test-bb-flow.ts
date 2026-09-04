@@ -48,10 +48,10 @@ async function runE2E() {
 
     console.log("\n--- BU?C 1: TRADINGVIEW G?I WEBHOOK ---");
     
-    let currentSequence = 1;
-    const createTrace = () => EventFactory.createTrace('test-corr', 'test-event', 'TradingView', currentSequence++);
+    const { SequenceAuthority } = require('../core/infrastructure/SequenceAuthority');
+    
 
-    const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', robotId, 1, createTrace(), {
+    const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', robotId, 1, EventFactory.createTrace('test-corr', 'test-event', 'TradingView', SequenceAuthority.next(robotId)), {
         candle: { close: 105, high: 106, low: 90, timestamp: Date.now() }
     });
     await coreEventBus.publish(candleEvent as any);
@@ -63,7 +63,7 @@ async function runE2E() {
         }
     };
     
-    const indicatorEvent = EventFactory.createEvent('INDICATOR_UPDATED', robotId, 1, createTrace(), tvPayload);
+    const indicatorEvent = EventFactory.createEvent('INDICATOR_UPDATED', robotId, 1, EventFactory.createTrace('test-corr', 'test-event', 'TradingView', SequenceAuthority.next(robotId)), tvPayload);
     await coreEventBus.publish(indicatorEvent as any);
     
     await new Promise(r => setTimeout(r, 500));
@@ -73,9 +73,9 @@ async function runE2E() {
     
     const sendPrice = async (price: number) => {
         console.log(`[Tick Giá] Th? tru?ng: ${price}`);
-        const trace = EventFactory.createTrace('test-corr', 'test-event', 'TestRunner', currentSequence++);
+        const trace = EventFactory.createTrace('test-corr', 'test-event', 'TestRunner', SequenceAuthority.next(robotId));
         const priceEvent = EventFactory.createEvent('REALTIME_PRICE_EVENT', robotId, 1, trace, { price, eventTimestamp: Date.now() });
-        (priceEvent as any).isInternalCausal = true; 
+         
         await coreEventBus.publish(priceEvent as any);
         await new Promise(r => setTimeout(r, 200));
     };
@@ -92,3 +92,4 @@ async function runE2E() {
     process.exit(0);
 }
 runE2E().catch(console.error);
+

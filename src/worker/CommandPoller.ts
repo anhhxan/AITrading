@@ -127,9 +127,11 @@ export class CommandPoller {
                     if (payload.isE2E) {
                         console.log(`[WORKER] Running E2E Test Flow for ${cmd.robot_id}`);
                         const { EventFactory } = require('../core/infrastructure/EventFactory');
-                        const trace = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', 1);
+                                                const { SequenceAuthority } = require('../core/infrastructure/SequenceAuthority');
                         
-                        const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', cmd.robot_id, 1, trace, {
+                        let seq1 = SequenceAuthority.next(cmd.robot_id);
+                        const trace1 = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', seq1);
+                        const candleEvent = EventFactory.createEvent('CANDLE_CLOSED', cmd.robot_id, 1, trace1, {
                             candle: { close: 105, high: 106, low: 90, timestamp: Date.now() }
                         });
                         await coreEventBus.publish(candleEvent as any);
@@ -140,14 +142,15 @@ export class CommandPoller {
                                 'BB_MB': { ready: true, line1: 130, line2: 120, line3: 110, line4: 100, line5: 90 }
                             }
                         };
-                        const indicatorEvent = EventFactory.createEvent('INDICATOR_UPDATED', cmd.robot_id, 1, trace, tvPayload);
+                        let seq2 = SequenceAuthority.next(cmd.robot_id);
+                        const trace2 = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', seq2);
+                        const indicatorEvent = EventFactory.createEvent('INDICATOR_UPDATED', cmd.robot_id, 1, trace2, tvPayload);
                         await coreEventBus.publish(indicatorEvent as any);
 
-                        let seq = 2;
                         const sendPrice = async (price: number) => {
-                            const pTrace = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', seq++);
+                            let pSeq = SequenceAuthority.next(cmd.robot_id);
+                            const pTrace = EventFactory.createTrace(cmd.correlation_id, 'test-e2e', 'TestRunner', pSeq);
                             const priceEvent = EventFactory.createEvent('REALTIME_PRICE_EVENT', cmd.robot_id, 1, pTrace, { price, eventTimestamp: Date.now() });
-                            priceEvent.isInternalCausal = true; 
                             await coreEventBus.publish(priceEvent as any);
                             await new Promise(r => setTimeout(r, 1000));
                         };
@@ -192,4 +195,5 @@ export class CommandPoller {
         }).eq('command_id', commandId);
     }
 }
+
 
