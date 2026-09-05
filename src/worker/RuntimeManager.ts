@@ -48,15 +48,11 @@ export class RobotRuntime {
         let trueActiveSignal = null;
 
         if (activeSetup) {
-            trueState = activeSetup.state; // PENDING, ARM, ACTIVE
-            trueActiveSignal = {
-                setup_id: activeSetup.setup_id,
-                direction: activeSetup.direction,
-                trigger: activeSetup.trigger_price,
-                stop: activeSetup.stop_price,
-                snapshot: activeSetup.snapshot,
-                is_armed: activeSetup.is_armed || false
-            };
+            trueState = activeSetup.state; // PENDING, ARM, ACTIVE, WAIT_CANDLE_B_CONFIRMATION
+            trueActiveSignal = activeSetup.snapshot;
+            if (activeSetup.is_armed && trueActiveSignal) {
+                trueActiveSignal.is_armed = true;
+            }
         } else {
             trueState = configData.robots.current_state || 'IDLE';
         }

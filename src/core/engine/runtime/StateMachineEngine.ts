@@ -129,9 +129,32 @@ export class StateMachineEngine implements IEngine {
     if (currentState === RobotState.WAIT_SIGNAL || currentState === RobotState.WAIT_CANDLE_B_CONFIRMATION) {
       this.states.set(robotId, RobotState.WAIT_CANDLE_B_CONFIRMATION);
       this.activeSignals.set(robotId, event);
-        this.armedSignals.set(robotId, false);
+      this.armedSignals.set(robotId, false);
       this.timeoutCounts.set(robotId, 0); // Reset timeout
       // signalSystemTimestamps is no longer used for business logic, relying on event.payload.barTimestamp
+
+      const { getSupabaseAdmin } = require('../../../lib/supabase');
+      const supabase = getSupabaseAdmin();
+      
+      const { error: setupErr } = await supabase.from('active_setups').upsert({
+          robot_id: robotId,
+          setup_id: robotId,
+          state: RobotState.WAIT_CANDLE_B_CONFIRMATION,
+          direction: event.direction,
+          trigger_price: event.direction === 'LONG' ? event.entryTrigger?.upper : event.entryTrigger?.lower,
+          snapshot: event,
+          is_armed: false
+      }, { onConflict: 'robot_id, setup_id' });
+      
+      if (setupErr) {
+          console.error(`[StateMachineEngine] FAILED to persist active_setups for robot ${robotId}:`, setupErr);
+          // Revert memory state
+          this.states.set(robotId, currentState);
+          this.activeSignals.delete(robotId);
+          this.armedSignals.delete(robotId);
+          throw new Error(`Failed to persist active_setups: ${setupErr.message}`);
+      }
+
       await this.persistState(robotId, RobotState.WAIT_CANDLE_B_CONFIRMATION);
       
       const timeframe = this.robotTimeframes.get(robotId) || '1m';
