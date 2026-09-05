@@ -7,9 +7,9 @@ import { coreEventBus } from '../core/infrastructure/EventBus';
 import { EventFactory } from '../core/infrastructure/EventFactory';
 
 async function runE2E() {
-    console.log("=== B?T Ð?U B?N TEST E2E CHI?N THU?T BB RETRACEMENT ===");
+    console.log("=== B?T Ã?U B?N TEST E2E CHI?N THU?T BB RETRACEMENT ===");
     
-    // 1. Kh?i t?o các Engine d?c l?p
+    // 1. Kh?i t?o cÃ¡c Engine d?c l?p
     const strategyEngine = new StrategyEngine();
     const stateMachine = new StateMachineEngine();
     const riskEngine = new RiskEngine();
@@ -33,15 +33,15 @@ async function runE2E() {
 
     coreEventBus.subscribe('STRATEGY_SIGNAL_EVENT', async (e: any) => {
         if (e.direction !== 'NONE') {
-            console.log(`[Tín Hi?u] Nh?n tín hi?u Strategy: ${e.direction} (Trigger: ${e.entryTrigger?.lower || 0} -> ${e.entryTrigger?.upper || 0})`);
+            console.log(`[TÃ­n Hi?u] Nh?n tÃ­n hi?u Strategy: ${e.direction} (Trigger: ${e.entryTrigger?.lower || 0} -> ${e.entryTrigger?.upper || 0})`);
         }
     });
-    coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (e: any) => console.log(`[Tr?ng Thái] Chuy?n d?i: ${e.oldState || e.previousState || 'WAIT_SIGNAL'} ? ${e.newState} (Lý do: ${e.reason})`));
+    coreEventBus.subscribe('STATE_TRANSITION_EVENT', async (e: any) => console.log(`[Tr?ng ThÃ¡i] Chuy?n d?i: ${e.oldState || e.previousState || 'WAIT_SIGNAL'} ? ${e.newState} (LÃ½ do: ${e.reason})`));
     coreEventBus.subscribe('TRADE_PLAN_EVENT', async (e: any) => console.log(`[Risk Engine] K? ho?ch giao d?ch OK! Size: ${e.positionSize}`));
     coreEventBus.subscribe('POSITION_OPENED_EVENT', async (e: any) => {
-        console.log(`\n?? [Th?c Thi] VÔ L?NH THÀNH CÔNG!`);
+        console.log(`\n?? [Th?c Thi] VÃ” L?NH THÃ€NH CÃ”NG!`);
         console.log(`   ? Hu?ng: ${e.side}`);
-        console.log(`   ? Giá Vào: ${e.entryPrice}`);
+        console.log(`   ? GiÃ¡ VÃ o: ${e.entryPrice}`);
         console.log(`   ? Stop Loss: ${e.stopLoss}`);
         console.log(`   ? Take Profit: ${e.takeProfit}`);
     });
@@ -68,11 +68,11 @@ async function runE2E() {
     
     await new Promise(r => setTimeout(r, 500));
 
-    console.log("\n--- BU?C 2: GIÁ REALTIME (TICK) HO?T Ð?NG ---");
-    console.log("-> Ð?y giá vào Vùng Ph?c Kích (ARM Zone: B4 -> B3 t?c là t? 100 -> 110)");
+    console.log("\n--- BU?C 2: GIÃ REALTIME (TICK) HO?T Ã?NG ---");
+    console.log("-> Ã?y giÃ¡ vÃ o VÃ¹ng Ph?c KÃ­ch (ARM Zone: B4 -> B3 t?c lÃ  t? 100 -> 110)");
     
     const sendPrice = async (price: number) => {
-        console.log(`[Tick Giá] Th? tru?ng: ${price}`);
+        console.log(`[Tick GiÃ¡] Th? tru?ng: ${price}`);
         const trace = EventFactory.createTrace('test-corr', 'test-event', 'TestRunner', SequenceAuthority.next(robotId));
         const priceEvent = EventFactory.createEvent('REALTIME_PRICE_EVENT', robotId, 1, trace, { price, eventTimestamp: Date.now() });
          
@@ -83,12 +83,12 @@ async function runE2E() {
     await sendPrice(102); 
     await sendPrice(105); 
     
-    console.log("\n-> Ð?y giá ngu?c l?i Vùng Cò Súng (Trigger: B4 + 10%*(B3-B4) = 101)");
+    console.log("\n-> Ã?y giÃ¡ ngu?c l?i VÃ¹ng CÃ² SÃºng (Trigger: B4 + 10%*(B3-B4) = 101)");
     await sendPrice(103);
-    await sendPrice(101); // Kích ho?t Trigger -> READY_TO_ENTER -> TRADE_PLAN -> POSITION_OPENED
+    await sendPrice(101); // KÃ­ch ho?t Trigger -> READY_TO_ENTER -> TRADE_PLAN -> POSITION_OPENED
     
     await new Promise(r => setTimeout(r, 2000));
-    console.log("\n=== TEST HOÀN T?T ===");
+    console.log("\n=== TEST HOÃ€N T?T ===");
     process.exit(0);
 }
 runE2E().catch(console.error);
