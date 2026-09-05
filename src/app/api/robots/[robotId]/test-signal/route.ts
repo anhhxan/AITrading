@@ -20,6 +20,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         return NextResponse.json({ error: 'MISSING_ROBOT_CONFIG', details: 'Robot is missing trading_view_symbol or timeframe' }, { status: 400 });
     }
 
+    let expected_delta_ms = 60000;
+    const tf = robot.timeframe;
+    if (tf === '3') expected_delta_ms = 3 * 60000;
+    else if (tf === '5') expected_delta_ms = 5 * 60000;
+    else if (tf === '10') expected_delta_ms = 10 * 60000;
+    else if (tf === '15') expected_delta_ms = 15 * 60000;
+    else if (tf === '30') expected_delta_ms = 30 * 60000;
+    else if (tf === '45') expected_delta_ms = 45 * 60000;
+    else if (tf === '60' || tf === '1H' || tf === '1h') expected_delta_ms = 60 * 60000;
+    else if (tf === '120' || tf === '2H' || tf === '2h') expected_delta_ms = 120 * 60000;
+    else if (tf === '180' || tf === '3H' || tf === '3h') expected_delta_ms = 180 * 60000;
+    else if (tf === '240' || tf === '4H' || tf === '4h') expected_delta_ms = 240 * 60000;
+    else if (tf === 'D' || tf === '1D') expected_delta_ms = 24 * 60 * 60000;
+
+    const { data: lastTrace } = await supabase
+        .from('signal_trace_events')
+        .select('bar_timestamp')
+        .eq('robot_id', robotId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+    let nextTimestamp = Date.now();
+    if (lastTrace && lastTrace.length > 0 && typeof lastTrace[0].bar_timestamp === 'number') {
+        nextTimestamp = lastTrace[0].bar_timestamp + expected_delta_ms;
+    }
+
     const testId = crypto.randomUUID();
     console.log(`[BFF] TEST_ID=${testId}`);
     const proxyBaseUrl = process.env.CLOUDFLARE_PROXY_URL || 'https://tv-webhook-proxy.tradingbn.workers.dev';
@@ -35,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ rob
         tvSymbol: robot.trading_view_symbol,
         tvTickerId: robot.trading_view_symbol,
         timeframe: robot.timeframe,
-        barTimestamp: Date.now(),
+        barTimestamp: nextTimestamp,
         open: 100, high: 106, low: 90, close: 105, volume: 1,
         indicator: {
             length: 20,
