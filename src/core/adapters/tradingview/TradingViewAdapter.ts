@@ -63,6 +63,13 @@ export class TradingViewAdapter {
     this.configs.set(robotId, config);
   }
 
+  // Canonicalize symbol (e.g. "BINANCE:BTCUSDT" -> "BTCUSDT")
+  private canonicalizeSymbol(symbol: string): string {
+    if (!symbol) return '';
+    const parts = String(symbol).split(':');
+    return parts[parts.length - 1].toUpperCase();
+  }
+
   // Canonicalize TradingView timeframe (e.g. "180" -> "3H")
   private canonicalizeTimeframe(tvTimeframe: string): string {
     if (tvTimeframe === '1') return '1m';
@@ -135,11 +142,21 @@ export class TradingViewAdapter {
     }
 
     // VALIDATION GATE
-    const canonicalTF = this.canonicalizeTimeframe(payload.timeframe);
+    const actualTF = this.canonicalizeTimeframe(String(payload.timeframe));
+    const expectedTF = this.canonicalizeTimeframe(String(expectedConfig.timeframe));
+    
+    const actualSymbol = this.canonicalizeSymbol(String(payload.tvSymbol));
+    const expectedSymbol = this.canonicalizeSymbol(String(expectedConfig.canonicalSymbol));
+
     const validationErrors: string[] = [];
 
-    if (payload.tvSymbol !== expectedConfig.canonicalSymbol) validationErrors.push('Symbol mismatch');
-    if (canonicalTF?.toLowerCase() !== expectedConfig.timeframe?.toLowerCase()) validationErrors.push('Timeframe mismatch');
+    if (actualSymbol !== expectedSymbol) {
+        validationErrors.push('Symbol mismatch');
+    }
+    
+    if (actualTF?.toLowerCase() !== expectedTF?.toLowerCase()) {
+        validationErrors.push('Timeframe mismatch');
+    }
     
     // Dynamic Config Update Check
     let configChanged = false;
@@ -165,8 +182,14 @@ export class TradingViewAdapter {
     }
 
     if (validationErrors.length > 0) {
-      console.error(`[TradingViewAdapter] VALIDATION REJECTED:`, validationErrors);
-      return { accepted: false, validationErrors }; // STOP, KHA"NG CHY STRATEGY
+      console.error(`[TradingViewAdapter] VALIDATION REJECTED:`, {
+          validationErrors,
+          actualSymbol,
+          expectedSymbol,
+          actualTF,
+          expectedTF
+      });
+      return { accepted: false, validationErrors }; // STOP, KHÔNG CHẠY STRATEGY
     }
 
     // CANONICAL MAPPING
