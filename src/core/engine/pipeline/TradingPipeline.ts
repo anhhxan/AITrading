@@ -7,19 +7,25 @@ export class TradingPipeline {
 
     private async saveObservabilityEvent(event: any) {
         try {
-            await this.supabase.from('core_events').insert({
+            const { error } = await this.supabase.from('core_events').insert({
                 robot_id: event.robotId,
                 event_id: event.eventId || ('evt_' + Math.random().toString(36).substr(2, 9)),
                 event_type: event.eventType,
-                correlation_id: event.trace?.correlationId,
+                correlation_id: event.trace?.correlationId || 'unknown',
                 parent_id: event.trace?.parentId,
                 event_sequence: event.trace?.sequence || 1,
-                source_component: event.trace?.sourceComponent,
                 payload: event,
-                config_version: event.configVersion || 1,
                 timestamp: new Date().getTime()
             });
-        } catch(e) {}
+            if (error) throw error;
+        } catch (e: any) {
+            console.error(`[TradingPipeline] saveObservabilityEvent FAILED:`, {
+                event_type: event.eventType,
+                robot_id: event.robotId,
+                event_id: event.eventId,
+                error: e.message || String(e)
+            });
+        }
     }
 
     constructor(private runtimeManager: RuntimeManager) {}
