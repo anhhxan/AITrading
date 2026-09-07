@@ -56,35 +56,34 @@ export class TradingPipeline {
             if (signalEvent) {
                 await this.saveObservabilityEvent(signalEvent);
             }
-            if (!signalEvent) {
-                return { status: 'SKIPPED_NO_SIGNAL' };
-            }
-
             // 3. State Machine Engine (Direct)
             const stateMachine = this.runtimeManager.stateMachine as any;
-            await stateMachine.handleSignalDetected(signalEvent);
+            if (signalEvent) {
+                await stateMachine.handleSignalDetected(signalEvent);
+            }
 
             // 3b. Immediately evaluate the close price to check ARM/TRIGGER
             if (payload.close) {
+                const trace = signalEvent ? signalEvent.trace : indicatorEvent.trace;
                 const priceEvent = {
                     eventId: 'price_' + Math.random().toString(36).substr(2, 9),
                     eventType: 'REALTIME_PRICE_EVENT',
                     robotId: robotId,
                     price: payload.close,
                     eventTimestamp: payload.barTimestamp,
-                    trace: signalEvent.trace
+                    trace: trace
                 };
-                
+
                 await this.saveObservabilityEvent(priceEvent);
                 const transitionEvent = await stateMachine.handleRealtimePrice(priceEvent);
-                
+
                 // 4. Risk Engine (Direct)
                 if (transitionEvent) {
                     await this.saveObservabilityEvent(transitionEvent);
                 }
-                if (transitionEvent && transitionEvent.payload?.newState === 'READY_TO_ENTER') {
+                if (transitionEvent && (transitionEvent as any).newState === 'READY_TO_ENTER') {
                     const tradePlan = await (this.runtimeManager.riskEngine as any).handleReadyToEnter(transitionEvent);
-                    
+
                     // 5. Paper Execution (Direct)
                     if (tradePlan) {
                          await this.saveObservabilityEvent(tradePlan);
@@ -97,7 +96,11 @@ export class TradingPipeline {
                     }
                 }
             }
-            
+
+            if (!signalEvent) {
+                return { status: 'PROCESSED_PRICE_ONLY' };
+            }
+
             return { status: 'PIPELINE_COMPLETE' };
         } catch (error) {
             console.error(`[TradingPipeline] Error:`, error);

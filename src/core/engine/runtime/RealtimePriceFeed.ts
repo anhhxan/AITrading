@@ -17,15 +17,15 @@ export class RealtimePriceFeed {
     private ws: WebSocket | null = null;
     private symbol: string;
     private robotId: string;
-    
+
     public status: FeedStatus = 'DISCONNECTED';
     public lastPrice: number = 0;
     public lastMarketTimestamp: number = 0;
-    
+
     private reconnectTimeout: any = null;
     private staleCheckInterval: any = null;
     private pingInterval: any = null;
-    
+
     private engineId = 'RealtimePriceFeed_1';
 
     constructor(robotId: string, symbol: string) {
@@ -35,28 +35,31 @@ export class RealtimePriceFeed {
 
     private heartbeatInterval: any = null;
 
+    private clockSkew: number | null = null;
+
     public isDataValid(): boolean {
-        return this.status === 'CONNECTED' && 
-               this.lastPrice > 0 && 
-               this.lastMarketTimestamp > 0 && 
-               (Date.now() - this.lastMarketTimestamp <= 5000);
+        return this.status === 'CONNECTED' &&
+               this.lastPrice > 0 &&
+               this.lastMarketTimestamp > 0 &&
+               (this.clockSkew !== null && (Date.now() - this.clockSkew) - this.lastMarketTimestamp <= 5000);
     }
 
     public start() {
         if (this.status === 'CONNECTED' || this.status === 'CONNECTING') return;
         this.logForensic('REALTIME_PRICE_FEED_STARTED');
         this.connect();
-        
+
         // Stale check
         this.staleCheckInterval = setInterval(() => {
-            if (this.status === 'CONNECTED') {
-                if (this.lastMarketTimestamp <= 0 || Date.now() - this.lastMarketTimestamp > 5000) {
+            if (this.status === 'CONNECTED' && this.clockSkew !== null) {
+                const adjustedNow = Date.now() - this.clockSkew;
+                if (this.lastMarketTimestamp <= 0 || adjustedNow - this.lastMarketTimestamp > 5000) {
                     this.status = 'STALE';
                     this.logForensic('REALTIME_PRICE_FEED_STALE');
                 }
             }
         }, 1000);
-        
+
         // Heartbeat for UI and forensics (every 5 seconds)
         this.heartbeatInterval = setInterval(() => {
             if (this.status === 'CONNECTED' || this.status === 'CONNECTING') {
@@ -64,11 +67,11 @@ export class RealtimePriceFeed {
             }
         }, 5000);
     }
-    
+
     private async publishHeartbeat() {
         const seq = SequenceAuthority.next(this.robotId);
         const trace = EventFactory.createTrace(
-            `ws-heartbeat-${seq}`, 
+            `ws-heartbeat-${seq}`,
             `ws-agg-${this.lastMarketTimestamp}`,
             this.engineId,
             seq
@@ -87,25 +90,26 @@ export class RealtimePriceFeed {
                 status: this.status
             }
         );
-        
+
         await coreEventBus.publish(heartbeatEvent as any);
     }
 
     private connect() {
+        this.clockSkew = null;
         if (this.ws) {
             try { this.ws.close(); } catch(e) {}
             this.ws = null;
         }
 
         const streamSymbol = this.symbol.replace('BINANCE:', '').toLowerCase();
-        
+
         const wsUrl = `wss://fstream.binance.com/ws/${streamSymbol}@trade`;
         this.ws = new WebSocket(wsUrl);
 
         this.ws.onopen = () => {
             this.status = 'CONNECTING';
             this.logForensic('REALTIME_PRICE_FEED_CONNECTING');
-            
+
             // Ping to keep alive
             this.pingInterval = setInterval(() => {
                 if (this.ws?.readyState === WebSocket.OPEN) {
@@ -120,16 +124,21 @@ export class RealtimePriceFeed {
                 if (data.e === 'trade') {
                     const price = parseFloat(data.p);
                     const timestamp = data.E;
-                    
+
                     if (price > 0 && timestamp > 0) {
+                        if (this.clockSkew === null) {
+                            this.clockSkew = Date.now() - timestamp;
+                            console.log(`[RealtimePriceFeed] Detected clock skew: ${this.clockSkew}ms`);
+                        }
+
                         this.lastPrice = price;
                         this.lastMarketTimestamp = timestamp; // Event time
-                        
+
                         if (this.status === 'STALE' || this.status === 'DISCONNECTED' || this.status === 'CONNECTING') {
                             this.status = 'CONNECTED';
                             this.logForensic('REALTIME_PRICE_FEED_CONNECTED');
                         }
-                        
+
                         this.publishEvent();
                     }
                 }
@@ -161,7 +170,7 @@ export class RealtimePriceFeed {
 
         const seq = SequenceAuthority.next(this.robotId);
         const trace = EventFactory.createTrace(
-            `ws-${seq}`, 
+            `ws-${seq}`,
             `ws-agg-${this.lastMarketTimestamp}`,
             this.engineId,
             seq
@@ -180,7 +189,7 @@ export class RealtimePriceFeed {
                 sequenceId: seq
             }
         );
-        
+
         await coreEventBus.publish(priceEvent as any);
     }
 
@@ -203,7 +212,7 @@ export class RealtimePriceFeed {
             symbol: this.symbol,
             timestamp: Date.now()
         }));
-        
+
         const seq = SequenceAuthority.next(this.robotId);
         const trace = EventFactory.createTrace(
             `ws-sys-${Date.now()}`,
@@ -223,7 +232,7 @@ export class RealtimePriceFeed {
                 timestamp: Date.now()
             }
         );
-        
+
         await coreEventBus.publish(sysEvent as any);
     }
 }
