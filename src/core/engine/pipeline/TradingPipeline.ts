@@ -1,5 +1,6 @@
 import { RuntimeManager } from '@/worker/RuntimeManager';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { coreEventBus } from '@/core/infrastructure/EventBus';
 
 
 export class TradingPipeline {
@@ -56,10 +57,8 @@ export class TradingPipeline {
             if (signalEvent) {
                 await this.saveObservabilityEvent(signalEvent);
             }
-            // 3. State Machine Engine (Direct)
             const stateMachine = this.runtimeManager.stateMachine as any;
             if (signalEvent) {
-                const { coreEventBus } = require('@/core/infrastructure/EventBus');
                 await coreEventBus.publish(signalEvent as any);
                 await stateMachine.handleSignalDetected(signalEvent);
             }
