@@ -59,7 +59,10 @@ export class TradingPipeline {
             }
             const stateMachine = this.runtimeManager.stateMachine as any;
             if (signalEvent) {
-                await coreEventBus.publish(signalEvent as any);
+                const riskEngine = this.runtimeManager.riskEngine as any;
+                if (riskEngine && riskEngine.activeSignals && signalEvent.direction !== 'NONE') {
+                    riskEngine.activeSignals.set(robotId, signalEvent);
+                }
                 await stateMachine.handleSignalDetected(signalEvent);
             }
 
