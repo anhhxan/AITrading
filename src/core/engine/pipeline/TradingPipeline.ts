@@ -59,6 +59,8 @@ export class TradingPipeline {
             // 3. State Machine Engine (Direct)
             const stateMachine = this.runtimeManager.stateMachine as any;
             if (signalEvent) {
+                const { coreEventBus } = require('@/core/infrastructure/EventBus');
+                await coreEventBus.publish(signalEvent as any);
                 await stateMachine.handleSignalDetected(signalEvent);
             }
 
