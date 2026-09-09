@@ -3,7 +3,6 @@ import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { TradePlanEvent } from '../risk/RiskEngine';
 import { getSupabaseAdmin } from '../../../lib/supabase';
 import { EventFactory } from '../../infrastructure/EventFactory';
-import { ExchangeRouter } from './ExchangeRouter';
 
 export class PaperExecutionEngine implements IEngine {
   public engineId = 'PaperExecutionEngine_1';
@@ -19,77 +18,6 @@ export class PaperExecutionEngine implements IEngine {
     }));
 
     this.status = 'READY';
-  }
-
-    private router = new ExchangeRouter();
-
-  public async executeDirectTradePlan(plan: any, signalId: string): Promise<{ status: string, orderId?: string, fillPrice?: number, filledQuantity?: number, reason?: string }> {
-      console.log('[PaperExecutionEngine] Direct Execution for signal ' + signalId);
-      
-      const adapter = await this.router.getAdapter(plan.robotId);
-      const clientOrderId = plan.robotId + '_' + signalId;
-
-      const entryReq = {
-          clientOrderId: clientOrderId,
-          symbol: plan.executionSymbol || 'BTCUSDT',
-          side: plan.direction,
-          type: plan.orderType || 'MARKET',
-          price: plan.triggerPrice,
-          quantity: plan.positionSize
-      };
-
-      let entryRes;
-      try {
-          entryRes = await adapter.placeOrder(entryReq);
-      } catch (err: any) {
-          return { status: 'FAILED', reason: err.message };
-      }
-
-      if (entryRes.status === 'REJECTED') {
-          return { status: 'REJECTED', reason: entryRes.reason };
-      }
-
-      if (entryRes.status === 'TIMEOUT') {
-          const reconRes = await adapter.queryOrder(clientOrderId);
-          if (reconRes.status === 'REJECTED' || reconRes.reason === 'Not Found') {
-             return { status: 'FAILED', reason: 'TIMEOUT_AND_NOT_FOUND' };
-          }
-          entryRes = reconRes;
-      }
-
-      if (entryRes.status === 'FILLED' || entryRes.status === 'PARTIAL_FILL') {
-          if (plan.stopLoss) {
-              const protReq = {
-                  parentOrderId: entryRes.orderId || clientOrderId,
-                  clientOrderId: 'prot_' + clientOrderId,
-                  symbol: plan.executionSymbol || 'BTCUSDT',
-                  side: plan.direction === 'LONG' ? 'SHORT' : 'LONG',
-                  stopLossPrice: plan.stopLoss,
-                  takeProfitPrice: plan.takeProfit,
-                  quantity: entryRes.filledQuantity || plan.positionSize
-              };
-
-              let protRes;
-              try {
-                  protRes = await adapter.placeProtection(protReq as any);
-              } catch (err: any) {
-                  return { status: 'PROTECTION_PENDING', fillPrice: entryRes.fillPrice, filledQuantity: entryRes.filledQuantity, reason: 'Protection placing threw error' };
-              }
-
-              if (protRes.status === 'REJECTED' || protRes.status === 'TIMEOUT') {
-                  return { status: 'PROTECTION_PENDING', fillPrice: entryRes.fillPrice, filledQuantity: entryRes.filledQuantity, reason: 'Protection order rejected or timeout' };
-              }
-          }
-          
-          return { 
-              status: entryRes.status,
-              orderId: entryRes.orderId, 
-              fillPrice: entryRes.fillPrice,
-              filledQuantity: entryRes.filledQuantity 
-          };
-      }
-
-      return { status: 'FAILED', reason: 'UNKNOWN_STATE' };
   }
 
   public async handleTradePlan(event: TradePlanEvent) {
