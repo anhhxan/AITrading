@@ -3,6 +3,7 @@ import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { TradePlanEvent } from '../risk/RiskEngine';
 import { getSupabaseAdmin } from '../../../lib/supabase';
 import { EventFactory } from '../../infrastructure/EventFactory';
+import { ExchangeRouter } from './ExchangeRouter';
 
 export class PaperExecutionEngine implements IEngine {
   public engineId = 'PaperExecutionEngine_1';
@@ -18,6 +19,77 @@ export class PaperExecutionEngine implements IEngine {
     }));
 
     this.status = 'READY';
+  }
+
+    private router = new ExchangeRouter();
+
+  public async executeDirectTradePlan(plan: any, signalId: string): Promise<{ status: string, orderId?: string, fillPrice?: number, filledQuantity?: number, reason?: string }> {
+      console.log('[PaperExecutionEngine] Direct Execution for signal ' + signalId);
+      
+      const adapter = await this.router.getAdapter(plan.robotId);
+      const clientOrderId = plan.robotId + '_' + signalId;
+
+      const entryReq = {
+          clientOrderId: clientOrderId,
+          symbol: plan.executionSymbol || 'BTCUSDT',
+          side: plan.direction,
+          type: plan.orderType || 'MARKET',
+          price: plan.triggerPrice,
+          quantity: plan.positionSize
+      };
+
+      let entryRes;
+      try {
+          entryRes = await adapter.placeOrder(entryReq);
+      } catch (err: any) {
+          return { status: 'FAILED', reason: err.message };
+      }
+
+      if (entryRes.status === 'REJECTED') {
+          return { status: 'REJECTED', reason: entryRes.reason };
+      }
+
+      if (entryRes.status === 'TIMEOUT') {
+          const reconRes = await adapter.queryOrder(clientOrderId);
+          if (reconRes.status === 'REJECTED' || reconRes.reason === 'Not Found') {
+             return { status: 'FAILED', reason: 'TIMEOUT_AND_NOT_FOUND' };
+          }
+          entryRes = reconRes;
+      }
+
+      if (entryRes.status === 'FILLED' || entryRes.status === 'PARTIAL_FILL') {
+          if (plan.stopLoss) {
+              const protReq = {
+                  parentOrderId: entryRes.orderId || clientOrderId,
+                  clientOrderId: 'prot_' + clientOrderId,
+                  symbol: plan.executionSymbol || 'BTCUSDT',
+                  side: plan.direction === 'LONG' ? 'SHORT' : 'LONG',
+                  stopLossPrice: plan.stopLoss,
+                  takeProfitPrice: plan.takeProfit,
+                  quantity: entryRes.filledQuantity || plan.positionSize
+              };
+
+              let protRes;
+              try {
+                  protRes = await adapter.placeProtection(protReq as any);
+              } catch (err: any) {
+                  return { status: 'PROTECTION_PENDING', fillPrice: entryRes.fillPrice, filledQuantity: entryRes.filledQuantity, reason: 'Protection placing threw error' };
+              }
+
+              if (protRes.status === 'REJECTED' || protRes.status === 'TIMEOUT') {
+                  return { status: 'PROTECTION_PENDING', fillPrice: entryRes.fillPrice, filledQuantity: entryRes.filledQuantity, reason: 'Protection order rejected or timeout' };
+              }
+          }
+          
+          return { 
+              status: entryRes.status,
+              orderId: entryRes.orderId, 
+              fillPrice: entryRes.fillPrice,
+              filledQuantity: entryRes.filledQuantity 
+          };
+      }
+
+      return { status: 'FAILED', reason: 'UNKNOWN_STATE' };
   }
 
   public async handleTradePlan(event: TradePlanEvent) {
@@ -350,6 +422,92 @@ const markCompleted = async (cid: string) => {
     }
   }
 
+  
+  public async closePosition(robotId: string, correlationId: string, eventId: string, exitPrice: number, closeReason: string = 'TRADINGVIEW_EXIT') {
+      const supabase = getSupabaseAdmin();
+      const { data: existingPos, error: checkErr } = await supabase
+        .from('active_positions')
+        .select('*')
+        .eq('robot_id', robotId)
+        .single();
+        
+      if (checkErr || !existingPos) {
+          console.log(`[PAPER] CLOSE_IGNORED TEST_ID=${correlationId} reason=NO_OPEN_POSITION robot=${robotId}`);
+          return;
+      }
+      
+      console.log(`[PaperExecutionEngine] CLOSING position for robot ${robotId} at ${exitPrice}`);
+      
+      const closeAction = existingPos.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
+      const closeClientOrderId = `PAPER-CLS-${robotId.substring(0,8)}-${eventId.substring(0,8)}`;
+      
+      const { data: closeIntentData } = await supabase.from('execution_intents').insert({
+        robot_id: robotId,
+        signal_id: eventId,
+        client_order_id: closeClientOrderId,
+        action: closeAction,
+        symbol: existingPos.symbol,
+        order_type: 'MARKET',
+        quantity: existingPos.quantity,
+        price: exitPrice,
+        leverage: existingPos.leverage,
+        status: 'FILLED'
+      }).select('id').single();
+
+      if (closeIntentData) {
+          await supabase.from('active_orders').insert({
+            intent_id: closeIntentData.id,
+            robot_id: robotId,
+            binance_order_id: `MOCK-BINANCE-${closeClientOrderId}`,
+            client_order_id: closeClientOrderId,
+            symbol: existingPos.symbol,
+            side: existingPos.side === 'LONG' ? 'SELL' : 'BUY',
+            order_type: 'MARKET',
+            quantity: existingPos.quantity,
+            price: exitPrice,
+            filled_quantity: existingPos.quantity,
+            average_fill_price: exitPrice,
+            status: 'FILLED',
+            role: 'TAKER',
+            correlation_id: correlationId
+          });
+      }
+
+      const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (exitPrice - existingPos.entry_price) * existingPos.quantity;
+      await supabase.from('trade_history').insert({
+          robot_id: robotId,
+          side: existingPos.side,
+          size: existingPos.quantity,
+          entry_price: existingPos.entry_price,
+          exit_price: exitPrice,
+          realized_pnl: pnl,
+          fee: 0,
+          slippage: 0,
+          duration_seconds: 0,
+          close_reason: closeReason,
+          symbol: existingPos.symbol,
+          correlation_id: correlationId
+      });
+
+      await supabase.from('active_positions').delete().eq('id', existingPos.id);
+      
+      if (closeIntentData) {
+          await supabase.from('active_orders').delete().eq('intent_id', closeIntentData.id);
+          await supabase.from('execution_intents').delete().eq('id', closeIntentData.id);
+      }
+
+      const trace = EventFactory.createTrace(correlationId, eventId, this.engineId, 999);
+      const closedEvent = EventFactory.createEvent('POSITION_CLOSED_EVENT', robotId, 1, trace, {
+        symbol: existingPos.symbol,
+        side: existingPos.side,
+        quantity: existingPos.quantity,
+        exitPrice: exitPrice,
+        realizedPnl: pnl
+      });
+      await coreEventBus.publish(closedEvent as any);
+      console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${correlationId} position closed`);
+  }
+
   public healthCheck(): any {
     return { status: this.status };
   }
@@ -364,3 +522,4 @@ const markCompleted = async (cid: string) => {
     this.status = 'STOPPED';
   }
 }
+
