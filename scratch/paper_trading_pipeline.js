@@ -2,7 +2,7 @@ require('dotenv').config({ path: '.env.local' });
 const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-const robotId = '6e7a371d-dc97-4f07-b804-ee89518a898b';
+const robotId = 'e0d00614-dfcc-4948-b840-340bfa0f8707';
 const webhookSecret = process.env.TV_WEBHOOK_SECRET;
 
 async function sendWebhook(setup_id, event, direction = 'LONG') {

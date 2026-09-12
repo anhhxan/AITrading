@@ -1,10 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
 async function run() {
-    const { data, error } = await supabase.from('robots').select('id, status');
-    if (error) console.error("Error:", error);
-    else console.log(data);
+    const { data, error } = await supabase.from('robots').select('*').limit(1);
+    console.log(Object.keys(data[0] || {}));
 }
 run();

@@ -1,0 +1,170 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © SmartPine
+
+//@version=5
+indicator("SMART PINE V1", overlay=true)
+
+//==============================================================================
+// 1. INPUTS
+//==============================================================================
+grp_bb = "Bollinger Bands"
+length = input.int(20, title="BB Length", group=grp_bb)
+src = input.source(close, title="Source", group=grp_bb)
+mult = input.float(2.5, title="Outer Band (B1/B5) Mult", group=grp_bb)
+mult2 = input.float(1.3, title="Inner Band (B2/B4) Mult", group=grp_bb)
+
+grp_sys = "System Config"
+robotSlug = input.string("btc_1m_bb", title="Robot Slug", group=grp_sys)
+strategyId = input.string("BB_MB", title="Strategy ID", group=grp_sys)
+configVersion = input.int(1, title="Config Version", group=grp_sys)
+maxTimeoutCandles = input.int(3, title="Max Timeout Candles", group=grp_sys)
+showDebug = input.bool(true, title="Show Debug Labels", group=grp_sys)
+
+//==============================================================================
+// 2. BANDS
+//==============================================================================
+basis = ta.sma(src, length)
+dev = mult * ta.stdev(src, length)
+dev2 = mult2 * ta.stdev(src, length)
+
+B1 = basis + dev
+B2 = basis + dev2
+B3 = basis
+B4 = basis - dev2
+B5 = basis - dev
+
+plot(B1, color=color.new(color.yellow, 0), title="B1 (Upper)")
+plot(B2, color=color.new(color.yellow, 50), title="B2 (Upper2)")
+plot(B3, color=color.new(color.yellow, 0), title="B3 (Basis)")
+plot(B4, color=color.new(color.yellow, 50), title="B4 (Lower2)")
+plot(B5, color=color.new(color.yellow, 0), title="B5 (Lower)")
+
+//==============================================================================
+// 3. STATE MACHINE (varip)
+//==============================================================================
+varip int STATE_IDLE = 0
+varip int STATE_CANDIDATE_LONG = 1
+varip int STATE_ARMED_LONG = 2
+varip int STATE_CANDIDATE_SHORT = -1
+varip int STATE_ARMED_SHORT = -2
+
+varip int currentState = STATE_IDLE
+varip float entryTriggerPrice = na
+varip float stopLossPrice = na
+varip int candidateBarIndex = na
+
+// Candidate and Timeout are ONLY evaluated on bar close
+if barstate.isconfirmed
+    // Check Timeout First
+    if currentState != STATE_IDLE and not na(candidateBarIndex)
+        if (bar_index - candidateBarIndex) >= maxTimeoutCandles
+            currentState := STATE_IDLE
+            candidateBarIndex := na
+
+    if currentState == STATE_IDLE
+        bool isLongRule1 = (close >= B5 and close <= B4)
+        bool isLongRule2 = (low <= B4 and close > B4 and close <= B3)
+        bool isShortRule1 = (close >= B2 and close <= B1)
+        bool isShortRule2 = (high >= B2 and close < B2 and close >= B3)
+
+        if isLongRule1 or isLongRule2
+            currentState := STATE_CANDIDATE_LONG
+            candidateBarIndex := bar_index
+        else if isShortRule1 or isShortRule2
+            currentState := STATE_CANDIDATE_SHORT
+            candidateBarIndex := bar_index
+
+// Realtime / Intrabar ARM and CANCEL Evaluation
+if currentState == STATE_CANDIDATE_LONG
+    if low < B5 or high > B2
+        currentState := STATE_IDLE // CANCEL
+    else if high >= B4 and low <= B3
+        currentState := STATE_ARMED_LONG
+        entryTriggerPrice := B4 + (B3 - B4) * 0.10
+        stopLossPrice := B4 - (B4 - B5) * 0.20
+
+else if currentState == STATE_CANDIDATE_SHORT
+    if high > B1 or low < B3 // SHORT CANCEL = phá B3
+        currentState := STATE_IDLE // CANCEL
+    else if low <= B2 and high >= B3
+        currentState := STATE_ARMED_SHORT
+        entryTriggerPrice := B2 - (B2 - B3) * 0.10
+        stopLossPrice := B2 + (B1 - B2) * 0.20
+
+// Realtime / Intrabar FIRE Evaluation
+bool doFire = false
+string signalSide = ""
+
+if currentState == STATE_ARMED_LONG
+    if low < B5 or high > B2
+        currentState := STATE_IDLE // CANCEL
+    else if low <= entryTriggerPrice
+        doFire := true
+        signalSide := "LONG"
+        currentState := STATE_IDLE // Lock it (reset to IDLE)
+
+else if currentState == STATE_ARMED_SHORT
+    if high > B1 or low < B3 // SHORT CANCEL = phá B3
+        currentState := STATE_IDLE // CANCEL
+    else if high >= entryTriggerPrice
+        doFire := true
+        signalSide := "SHORT"
+        currentState := STATE_IDLE // Lock it
+
+//==============================================================================
+// 4. WEBHOOK / ALERT
+//==============================================================================
+if doFire
+    // time returns unix milliseconds natively in Pine v5
+    string signalId = str.tostring(time) + "_" + signalSide
+    
+    // Exactly matches Zod Schema
+    string json = '{"signal_id":"' + signalId + '"' +
+           ',"robot_slug":"' + robotSlug + '"' +
+           ',"strategy":"' + strategyId + '"' +
+           ',"symbol":"' + syminfo.ticker + '"' +
+           ',"timeframe":"' + timeframe.period + '"' +
+           ',"side":"' + signalSide + '"' +
+           ',"entry_price":' + str.tostring(entryTriggerPrice) + 
+           ',"entry_type":"MARKET"' +
+           ',"stop_loss":' + str.tostring(stopLossPrice) +
+           ',"signal_timestamp":' + str.tostring(time) + 
+           ',"config_version":' + str.tostring(configVersion) + 
+           ',"indicator_snapshot":{' +
+               '"line1":' + str.tostring(B1) + ',' +
+               '"line2":' + str.tostring(B2) + ',' +
+               '"line3":' + str.tostring(B3) + ',' +
+               '"line4":' + str.tostring(B4) + ',' +
+               '"line5":' + str.tostring(B5) + '}' +
+           '}'
+           
+    alert(json, alert.freq_all) // Freq_all is safe because we reset currentState
+
+//==============================================================================
+// 5. DEBUG VISUALS
+//==============================================================================
+plotchar(doFire and signalSide == "LONG", title="FIRE LONG", char="??", location=location.belowbar, color=color.green, size=size.normal)
+plotchar(doFire and signalSide == "SHORT", title="FIRE SHORT", char="??", location=location.abovebar, color=color.red, size=size.normal)
+
+// Debug Table
+var table debugTable = table.new(position.top_right, 2, 5, border_width=1)
+if showDebug and barstate.islast
+    table.cell(debugTable, 0, 0, "Current State", bgcolor=color.gray, text_color=color.white)
+    
+    string stateStr = "IDLE"
+    if currentState == STATE_CANDIDATE_LONG
+        stateStr := "LONG_CANDIDATE"
+    else if currentState == STATE_ARMED_LONG
+        stateStr := "LONG_ARMED"
+    else if currentState == STATE_CANDIDATE_SHORT
+        stateStr := "SHORT_CANDIDATE"
+    else if currentState == STATE_ARMED_SHORT
+        stateStr := "SHORT_ARMED"
+        
+    table.cell(debugTable, 1, 0, stateStr, bgcolor=color.black, text_color=color.white)
+    table.cell(debugTable, 0, 1, "Entry Trigger", bgcolor=color.gray, text_color=color.white)
+    table.cell(debugTable, 1, 1, str.tostring(entryTriggerPrice), bgcolor=color.black, text_color=color.white)
+    table.cell(debugTable, 0, 2, "Stop Loss", bgcolor=color.gray, text_color=color.white)
+    table.cell(debugTable, 1, 2, str.tostring(stopLossPrice), bgcolor=color.black, text_color=color.white)
+    table.cell(debugTable, 0, 3, "Candidate Bar", bgcolor=color.gray, text_color=color.white)
+    table.cell(debugTable, 1, 3, str.tostring(candidateBarIndex), bgcolor=color.black, text_color=color.white)
