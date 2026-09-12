@@ -17,6 +17,7 @@ grp_sys = "System Config"
 robotSlug = input.string("btc_1m_bb", title="Robot Slug", group=grp_sys)
 strategyId = input.string("BB_MB", title="Strategy ID", group=grp_sys)
 configVersion = input.int(1, title="Config Version", group=grp_sys)
+webhookSecret = input.string("", title="Webhook Secret", group=grp_sys)
 maxTimeoutCandles = input.int(3, title="Max Timeout Candles", group=grp_sys)
 showDebug = input.bool(true, title="Show Debug Labels", group=grp_sys)
 
@@ -160,7 +161,9 @@ if doFire or doExit
            ',"symbol":"' + syminfo.ticker + '"' +
            ',"timeframe":"' + timeframe.period + '"' +
            ',"side":"' + actualSide + '"' +
+           ',"secret":"' + webhookSecret + '"' +
            ',"entry_price":' + str.tostring(entryTriggerPrice) + 
+           ',"close":' + str.tostring(close) + 
            ',"stop_loss":' + str.tostring(stopLossPrice) +
            ',"take_profit":' + str.tostring(takeProfitPrice) +
            ',"signal_timestamp":' + str.tostring(time) + 

@@ -193,7 +193,13 @@ export class TradingPipeline {
                 });
 
                 if (execution.closePosition) {
-                    const exitPrice = payload.entry_price || payload.close || existingPos.entry_price; // use payload price or fallback
+                    let parsedClose = payload.close ? Number(payload.close) : null;
+                    if (parsedClose !== null && (isNaN(parsedClose) || parsedClose <= 0)) parsedClose = null;
+                    
+                    let parsedEntry = payload.entry_price ? Number(payload.entry_price) : null;
+                    if (parsedEntry !== null && (isNaN(parsedEntry) || parsedEntry <= 0)) parsedEntry = null;
+
+                    const exitPrice = parsedClose || parsedEntry || existingPos.entry_price;
                     await execution.closePosition(robotId, correlationId, eventId, exitPrice, 'TRADINGVIEW_EXIT');
                 }
 
