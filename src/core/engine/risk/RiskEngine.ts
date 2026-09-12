@@ -80,6 +80,49 @@ export class RiskEngine implements IEngine {
     this.robotConfigs.set(robotId, config);
   }
 
+      public async evaluateDirectEntry(signal: import('../../contracts/EntrySignal').EntrySignal, config: RiskConfig, activePositionCount: number): Promise<{ decision: 'READY' | 'REJECTED', tradePlan?: any, reason?: string }> {
+        if (!config || config.accountBalance <= 0) return { decision: 'REJECTED', reason: 'INVALID_ACCOUNT_BALANCE' };
+        if (config.tradingViewSymbol !== signal.symbol) return { decision: 'REJECTED', reason: 'SYMBOL_MISMATCH' };
+        if (activePositionCount > 0) return { decision: 'REJECTED', reason: 'POSITION_ALREADY_OPEN' };
+
+        const result = calculateRiskPreview({
+            accountBalance: config.accountBalance,
+            direction: signal.side,
+            entryReferencePrice: signal.entry_price,
+            stopLoss: signal.stop_loss,
+            takeProfit: signal.take_profit || (signal.side === 'LONG' ? signal.entry_price * 1.05 : signal.entry_price * 0.95), // mock TP if missing
+            positionAllocationPercent: config.positionAllocationPercent,
+            leverage: config.leverage || 1
+        });
+
+        if (result.decision === 'RISK_REJECTED') {
+            return { decision: 'REJECTED', reason: result.reason || 'RISK_LIMIT_EXCEEDED' };
+        }
+
+        const tradePlan = {
+            robotId: signal.robot_slug,
+            strategyId: signal.strategy,
+            strategyVersion: '1',
+            tradingViewSymbol: config.tradingViewSymbol,
+            executionSymbol: config.executionSymbol,
+            timeframe: config.timeframe,
+            direction: signal.side,
+            triggerPrice: signal.entry_price,
+            entryReferencePrice: signal.entry_price,
+            stopLoss: signal.stop_loss,
+            takeProfit: signal.take_profit || (signal.side === 'LONG' ? signal.entry_price * 1.05 : signal.entry_price * 0.95),
+            accountBalance: config.accountBalance,
+            positionAllocationPercent: config.positionAllocationPercent,
+            positionValue: result.riskAmount,
+            positionSize: result.positionSize,
+            leverage: config.leverage || 1,
+            riskRewardRatio: result.riskRewardRatio,
+            orderType: signal.entry_type || 'MARKET'
+        };
+
+        return { decision: 'READY', tradePlan };
+    }
+
   public async handleReadyToEnter(event: StateTransitionEvent) {
     const robotId = event.robotId;
     console.log('[RiskEngine] handleReadyToEnter called for', robotId);
@@ -208,3 +251,4 @@ export class RiskEngine implements IEngine {
     this.status = 'STOPPED';
   }
 }
+

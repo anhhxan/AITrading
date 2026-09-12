@@ -42,16 +42,46 @@ export class TradingPipeline {
                 return { status: 'ERROR', reason: 'MISSING_EXECUTION_ENGINE' };
             }
 
-            // Guard: Check active position
-            const { data: existingPos, error: checkErr } = await this.supabase
-              .from('active_positions')
-              .select('*')
-              .eq('robot_id', robotId)
-              .single();
+            // Guard: Check active position and robot status
+            const [posResult, robotResult] = await Promise.all([
+                this.supabase.from('active_positions').select('*').eq('robot_id', robotId).single(),
+                this.supabase.from('robots').select('status').eq('id', robotId).single()
+            ]);
+            
+            const existingPos = posResult.data;
+            const robot = robotResult.data;
 
             // Trace Event Setup
             const eventId = 'evt_' + Math.random().toString(36).substr(2, 9);
             const trace = { correlationId, parentId: null, sequence: 1 };
+
+            const isEntry = payload.action && payload.action.startsWith('ENTRY');
+
+            if (isEntry) {
+                if (robotResult.error || !robot) {
+                    console.log(`[TradingPipeline] PAPER_ENTRY_IGNORED_ROBOT_NOT_FOUND_OR_ERROR`);
+                    await this.saveObservabilityEvent({
+                        eventId: 'evt_' + Math.random().toString(36).substr(2, 9),
+                        eventType: 'PAPER_ENTRY_IGNORED_ROBOT_NOT_FOUND',
+                        robotId,
+                        trace,
+                        action: payload.action
+                    });
+                    return { status: 'ERROR', error: robotResult.error || 'ROBOT_NOT_FOUND' };
+                }
+
+                if (robot.status !== 'RUNNING') {
+                    console.log(`[TradingPipeline] PAPER_ENTRY_IGNORED_ROBOT_STOPPED`);
+                    await this.saveObservabilityEvent({
+                        eventId: 'evt_' + Math.random().toString(36).substr(2, 9),
+                        eventType: 'PAPER_ENTRY_IGNORED_ROBOT_STOPPED',
+                        robotId,
+                        trace,
+                        action: payload.action
+                    });
+                    return { status: 'IGNORED_ROBOT_STOPPED' };
+                }
+            }
 
             await this.saveObservabilityEvent({
                 eventId,

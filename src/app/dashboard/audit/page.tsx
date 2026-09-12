@@ -55,7 +55,7 @@ export default async function AuditPage() {
                     </td>
                     <td className="px-6 py-4 text-xs">
                       <span className="text-slate-400">{log.previous_state || 'NONE'}</span>
-                      <span className="mx-2 text-slate-300">→</span>
+                      <span className="mx-2 text-slate-300">-&gt;</span>
                       <span className="font-medium text-slate-700">{log.requested_state}</span>
                     </td>
                   </tr>

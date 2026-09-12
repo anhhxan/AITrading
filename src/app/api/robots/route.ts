@@ -97,7 +97,7 @@ export async function POST(request: Request) {
         slug,
         user_id: user.id,
         current_state: 'IDLE',
-        status: 'CREATED',
+        status: 'STOPPED',
         trading_account_id: accountId || null,
         timeframe,
         signal_source: signalSource,
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
       .insert({
         robot_id: robot.id,
         version: 1,
-        status: 'PENDING',
+        status: 'ACTIVE',
         indicator_profile: resolvedIndicatorProfile,
         strategy_profile: resolvedStrategyProfile,
         risk_profile: resolvedRiskProfile,

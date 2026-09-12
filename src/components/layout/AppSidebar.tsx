@@ -1,4 +1,8 @@
-import { Home, Bot, Wallet, Settings, Activity } from "lucide-react"
+"use client"
+
+import { LayoutDashboard, Bot, Settings, Activity, History, PlaySquare } from "lucide-react"
+import { usePathname } from "next/navigation"
+import Link from "next/link"
 import {
   Sidebar,
   SidebarContent,
@@ -13,33 +17,40 @@ import {
 // Menu items.
 const items = [
   {
-    title: "Tổng quan",
-    url: "/",
-    icon: Home,
+    title: "Dashboard",
+    url: "/dashboard",
+    icon: LayoutDashboard,
   },
   {
-    title: "Trading Robots",
-    url: "/robots",
+    title: "Paper Trading",
+    url: "/dashboard/paper-trading",
+    icon: PlaySquare,
+  },
+  {
+    title: "Robots",
+    url: "/dashboard/robots",
     icon: Bot,
   },
   {
-    title: "Tài khoản (Providers)",
-    url: "/accounts",
-    icon: Wallet,
-  },
-  {
-    title: "Nhật ký hệ thống",
-    url: "/logs",
+    title: "Trade History",
+    url: "/dashboard/trades",
     icon: Activity,
   },
   {
-    title: "Cài đặt",
-    url: "/settings",
+    title: "Audit Logs",
+    url: "/dashboard/audit",
+    icon: History,
+  },
+  {
+    title: "Settings",
+    url: "/dashboard/settings",
     icon: Settings,
   },
 ]
 
 export function AppSidebar() {
+  const pathname = usePathname()
+
   return (
     <Sidebar>
       <SidebarContent>
@@ -47,16 +58,19 @@ export function AppSidebar() {
           <SidebarGroupLabel>AI Trading Platform V1.1</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <a href={item.url} className="w-full flex">
-                    <SidebarMenuButton>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </SidebarMenuButton>
-                  </a>
-                </SidebarMenuItem>
-              ))}
+              {items.map((item) => {
+                const isActive = pathname === item.url || pathname?.startsWith(item.url + "/")
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <Link href={item.url} className="w-full flex">
+                      <SidebarMenuButton isActive={isActive}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SidebarMenuItem>
+                )
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

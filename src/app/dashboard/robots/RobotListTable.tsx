@@ -2,11 +2,20 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Bot, ArrowUp, ArrowDown, Archive } from 'lucide-react'
+import { ArrowUp, ArrowDown, Archive, Activity } from 'lucide-react'
 import { updateRobotOrdersAction, archiveRobotAction } from './actions'
-import { translateRobotState } from '@/lib/utils'
 
-export default function RobotListTable({ robots, pnlData, activePositions = {} }: { robots: any[], pnlData: Record<string, number>, activePositions?: Record<string, { side: string, unrealized_pnl: number }> }) {
+export default function RobotListTable({ 
+  robots, 
+  pnlData, 
+  activePositions, 
+  lastSignals 
+}: { 
+  robots: any[], 
+  pnlData: Record<string, number | 'ERROR'>, 
+  activePositions: Record<string, string | 'ERROR'>,
+  lastSignals: Record<string, any | 'ERROR'>
+}) {
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
 
   const handleSwap = async (currentIndex: number, direction: 'up' | 'down') => {
@@ -14,13 +23,8 @@ export default function RobotListTable({ robots, pnlData, activePositions = {} }
     if (direction === 'down' && currentIndex === robots.length - 1) return;
 
     const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    
-    // Create a new array with the visual order explicitly numbered
     const newOrder = [...robots];
-    // Swap the elements
     [newOrder[currentIndex], newOrder[swapIndex]] = [newOrder[swapIndex], newOrder[currentIndex]];
-
-    // Map them all to explicit { id, order } so they never fallback to 0 ambiguously
     const updates = newOrder.map((r, idx) => ({ id: r.id, order: idx }));
 
     setLoadingAction(`swap-${robots[currentIndex].id}`)
@@ -32,9 +36,12 @@ export default function RobotListTable({ robots, pnlData, activePositions = {} }
   }
 
   const handleArchive = async (robot: any) => {
-    if (robot.status === 'RUNNING' || robot.trading_enabled) return;
+    if (robot.status === 'RUNNING') {
+       alert('Không thể Archive Robot đang RUNNING. Vui lòng Stop trước.');
+       return;
+    }
     
-    if (confirm(`Archive Robot này?\n\nTên: ${robot.name}\nTimeframe: ${robot.timeframe}\nMode: ${robot.trading_mode}\nBalance: $${robot.paper_balance}\nPnL: $${pnlData[robot.id] || 0}`)) {
+    if (confirm(`Bạn có chắc muốn Archive Robot này?\n\nTên: ${robot.name}\nSymbol: ${robot.symbol}\n\nRobot đã bị Archive sẽ bị ẩn khỏi danh sách.`)) {
       setLoadingAction(`archive-${robot.id}`)
       const res = await archiveRobotAction(robot.id)
       if (res.error) {
@@ -44,58 +51,81 @@ export default function RobotListTable({ robots, pnlData, activePositions = {} }
     }
   }
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'RUNNING':
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">RUNNING</span>;
-      case 'STOPPED':
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">STOPPED</span>;
-      case 'ARCHIVED':
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">ARCHIVED</span>;
-      default:
-        return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{status}</span>;
-    }
-  };
-
-  const getTradingBadge = (tradingEnabled: boolean) => {
-    if (tradingEnabled) {
-      return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">ON</span>;
-    }
-    return <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">PAUSED</span>;
-  };
-
-  const getHeartbeatStatus = (lastHeartbeat: string | null) => {
-    if (!lastHeartbeat) {
-      return <span className="text-xs text-slate-500">Worker not connected</span>;
-    }
-    const heartbeatTime = new Date(lastHeartbeat).getTime();
-    const now = Date.now();
-    if (now - heartbeatTime < 60000) {
-      return <span className="text-xs text-emerald-600 font-medium">ONLINE</span>;
-    }
-    return <span className="text-xs text-red-600 font-medium">OFFLINE</span>;
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '—'
+    return new Date(dateString).toLocaleString()
   }
 
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
+        <table className="w-full text-sm text-left whitespace-nowrap">
           <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="px-4 py-4 font-medium w-16">#</th>
-              <th className="px-6 py-4 font-medium">Robot Name & Slug</th>
-              <th className="px-6 py-4 font-medium">Lifecycle</th>
-              <th className="px-6 py-4 font-medium">Trading</th>
-              <th className="px-6 py-4 font-medium">Lời / Lỗ</th>
-              <th className="px-6 py-4 font-medium">Heartbeat</th>
+              <th className="px-4 py-4 font-medium w-16 text-center">#</th>
+              <th className="px-6 py-4 font-medium">Robot</th>
+              <th className="px-6 py-4 font-medium">Mode & Status</th>
+              <th className="px-6 py-4 font-medium">Position</th>
+              <th className="px-6 py-4 font-medium">Last Signal</th>
+              <th className="px-6 py-4 font-medium text-right">Realized PnL</th>
               <th className="px-6 py-4 font-medium text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {robots.map((robot, idx) => {
-              const pnl = pnlData[robot.id] || 0;
+              
+              // 1. Lifecycle Status
               const isRunning = robot.status === 'RUNNING';
-              const canArchive = robot.trading_mode === 'PAPER' && !isRunning && !robot.trading_enabled;
+
+              // 2. Position State
+              const posData = activePositions[robot.id];
+              let posBadge = <span className="text-slate-500 font-bold">FLAT</span>;
+              if (posData === 'ERROR') {
+                posBadge = <span className="text-red-500 text-xs">Error</span>;
+              } else if (posData === 'LONG') {
+                posBadge = <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">LONG</span>;
+              } else if (posData === 'SHORT') {
+                posBadge = <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700">SHORT</span>;
+              }
+
+              // 3. Realized PnL
+              const pnl = pnlData[robot.id];
+              let pnlDisplay = <span className="text-slate-400">No trades yet</span>;
+              if (pnl === 'ERROR') {
+                pnlDisplay = <span className="text-red-500 text-xs">Error</span>;
+              } else if (typeof pnl === 'number') {
+                if (pnl > 0) {
+                  pnlDisplay = <span className="text-green-600 font-bold">+${pnl.toFixed(2)} USDT</span>;
+                } else if (pnl < 0) {
+                  pnlDisplay = <span className="text-red-600 font-bold">-${Math.abs(pnl).toFixed(2)} USDT</span>;
+                } else {
+                  pnlDisplay = <span className="text-slate-600 font-bold">0.00 USDT</span>;
+                }
+              }
+
+              // 4. Last Signal
+              const sigData = lastSignals[robot.id];
+              let sigDisplay = <span className="text-slate-400 text-xs">No signal yet</span>;
+              if (sigData === 'ERROR') {
+                sigDisplay = <span className="text-red-500 text-xs">Error</span>;
+              } else if (sigData) {
+                let action = '—';
+                try {
+                  const payload = typeof sigData.payload === 'string' ? JSON.parse(sigData.payload) : sigData.payload;
+                  action = payload?.action || payload?.side || 'UNKNOWN';
+                } catch(e) {}
+                
+                let actionColor = 'text-slate-700';
+                if (action.includes('LONG')) actionColor = 'text-green-600';
+                if (action.includes('SHORT')) actionColor = 'text-red-600';
+
+                sigDisplay = (
+                  <div className="flex flex-col">
+                    <span className={`font-bold text-xs ${actionColor}`}>{action}</span>
+                    <span className="text-[10px] text-slate-500">{formatDate(sigData.created_at)}</span>
+                  </div>
+                );
+              }
 
               return (
                 <tr key={robot.id} className="hover:bg-slate-50/50 transition-colors">
@@ -120,64 +150,54 @@ export default function RobotListTable({ robots, pnlData, activePositions = {} }
                       </button>
                     </div>
                   </td>
+                  
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                        <Bot size={16} />
-                      </div>
-                      <div>
-                        <div className="font-semibold text-slate-800 flex items-center gap-2">
-                          <Link href={`/dashboard/robots/${robot.id}`} className="hover:underline hover:text-blue-600">
-                            {robot.name}
-                          </Link>
-                          {activePositions[robot.id] && (
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${activePositions[robot.id].side === 'LONG' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                              {activePositions[robot.id].side}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-500 mt-0.5">{robot.slug} • {robot.timeframe}</div>
-                      </div>
+                    <div className="font-bold text-slate-800 mb-0.5">
+                      <Link href={`/dashboard/robots/${robot.id}`} className="hover:underline hover:text-blue-600">
+                        {robot.name}
+                      </Link>
+                    </div>
+                    <div className="text-xs text-slate-500 font-medium">
+                      {robot.symbol || '—'} · {robot.timeframe || '—'}
                     </div>
                   </td>
+                  
                   <td className="px-6 py-4">
-                    {getStatusBadge(robot.status)}
-                    <div className="text-[10px] text-slate-500 mt-1 font-medium">{translateRobotState(robot.current_state)}</div>
+                    <div className="flex flex-col gap-1.5 items-start">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-blue-100 text-blue-700">
+                        {robot.trading_mode || 'PAPER'}
+                      </span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${isRunning ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-700'}`}>
+                        {robot.status || 'UNKNOWN'}
+                      </span>
+                    </div>
                   </td>
+                  
                   <td className="px-6 py-4">
-                    {getTradingBadge(robot.trading_enabled)}
-                    <div className="text-[10px] font-medium text-slate-500 mt-1">{robot.trading_mode}</div>
+                    {posBadge}
                   </td>
-                  <td className="px-6 py-4 font-semibold">
-                    {pnl > 0 ? (
-                      <span className="text-emerald-600">+${(pnl).toFixed(2)}</span>
-                    ) : pnl < 0 ? (
-                      <span className="text-red-600">-${Math.abs(pnl).toFixed(2)}</span>
-                    ) : (
-                      <span className="text-slate-500">$0.00</span>
-                    )}
-                  </td>
+                  
                   <td className="px-6 py-4">
-                    {getHeartbeatStatus(robot.last_heartbeat_at)}
-                    {robot.last_heartbeat_at && (
-                      <div className="text-[10px] text-slate-400 mt-1">
-                        {new Date(robot.last_heartbeat_at).toLocaleTimeString()}
-                      </div>
-                    )}
+                    {sigDisplay}
                   </td>
+                  
+                  <td className="px-6 py-4 text-right">
+                    {pnlDisplay}
+                  </td>
+                  
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-3">
                       <Link 
                         href={`/dashboard/robots/${robot.id}`}
-                        className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                        className="text-indigo-600 hover:text-indigo-900 text-sm font-bold"
                       >
-                        View
+                        VIEW
                       </Link>
                       <button
                         onClick={() => handleArchive(robot)}
-                        disabled={!canArchive || loadingAction !== null}
-                        title={!canArchive ? "Cannot archive (must be PAPER, STOPPED, trading OFF)" : "Archive Robot"}
-                        className={`text-slate-400 hover:text-amber-600 p-1.5 rounded-md transition-colors ${!canArchive ? 'opacity-30 cursor-not-allowed hidden' : ''}`}
+                        disabled={isRunning || loadingAction !== null}
+                        title={isRunning ? "Cannot archive RUNNING robot" : "Archive Robot"}
+                        className={`text-slate-400 hover:text-amber-600 p-1.5 rounded-md transition-colors ${isRunning ? 'opacity-30 cursor-not-allowed hidden' : ''}`}
                       >
                         <Archive size={16} />
                       </button>

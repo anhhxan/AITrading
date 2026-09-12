@@ -41,11 +41,7 @@ const markCompleted = async (cid: string) => {
           }
       };
 
-      // CLEANUP ORPHANS ON RECOVERY: Delete ephemeral records for this correlationId to allow safe retry
-      await supabase.from('active_orders').delete().eq('correlation_id', event.trace.correlationId);
-      const orphanClientOrderId = `PAPER-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
-      const orphanCloseClientOrderId = `PAPER-CLS-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
-      await supabase.from('execution_intents').delete().in('client_order_id', [orphanClientOrderId, orphanCloseClientOrderId]);
+      // CLEANUP ORPHANS ON RECOVERY removed as execution_intents and active_orders are no longer used for Paper.
       
       const { data: robot, error: robotErr } = await supabase
 
@@ -71,40 +67,6 @@ const markCompleted = async (cid: string) => {
           const { data: existingPos } = await supabase.from('active_positions').select('*').eq('robot_id', event.robotId).limit(1).maybeSingle();
           if (existingPos) {
               const closeAction = existingPos.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
-              const closeClientOrderId = `PAPER-CLS-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
-              
-              const { data: closeIntentData } = await supabase.from('execution_intents').insert({
-                robot_id: event.robotId,
-                signal_id: `${event.eventId}-CLS`,
-                client_order_id: closeClientOrderId,
-                action: closeAction,
-                symbol: event.executionSymbol,
-                order_type: 'MARKET',
-                quantity: existingPos.quantity,
-                price: event.entryReferencePrice,
-                leverage: existingPos.leverage,
-                status: 'FILLED'
-              }).select('id').single();
-
-              if (closeIntentData) {
-                  await supabase.from('active_orders').insert({
-                    intent_id: closeIntentData.id,
-                    robot_id: event.robotId,
-                    binance_order_id: `MOCK-BINANCE-${closeClientOrderId}`,
-                    client_order_id: closeClientOrderId,
-                    symbol: event.executionSymbol,
-                    side: existingPos.side === 'LONG' ? 'SELL' : 'BUY',
-                    order_type: 'MARKET',
-                    quantity: existingPos.quantity,
-                    price: event.entryReferencePrice,
-                    filled_quantity: existingPos.quantity,
-                    average_fill_price: event.entryReferencePrice,
-                    status: 'FILLED',
-                    role: 'TAKER',
-                  correlation_id: event.trace.correlationId
-                  });
-              }
-
               const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (event.entryReferencePrice - existingPos.entry_price) * existingPos.quantity;
               const ctx = existingPos.context_snapshot || {};
               const { error: thErr } = await supabase.from('trade_history').insert({
@@ -124,10 +86,6 @@ const markCompleted = async (cid: string) => {
               if (thErr) console.error('[PaperExecutionEngine] STOP/CLOSE trade_history insert failed:', thErr);
 
               await supabase.from('active_positions').delete().eq('id', existingPos.id);
-              if (closeIntentData) {
-                  await supabase.from('active_orders').delete().eq('intent_id', closeIntentData.id);
-                  await supabase.from('execution_intents').delete().eq('id', closeIntentData.id);
-              }
               console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${event.trace.correlationId} position closed`);
           }
           return;
@@ -156,44 +114,7 @@ const markCompleted = async (cid: string) => {
         } else {
           console.log(`[PaperExecutionEngine] REVERSAL DETECTED for robot ${event.robotId}. Closing existing position.`);
           
-          // 1. Insert CLOSE intent
           const closeAction = existingPos.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
-          const closeClientOrderId = `PAPER-CLS-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
-          
-          const { data: closeIntentData } = await supabase.from('execution_intents').insert({
-            robot_id: event.robotId,
-            signal_id: `${event.eventId}-CLS`,
-            client_order_id: closeClientOrderId,
-            action: closeAction,
-            symbol: event.executionSymbol,
-            order_type: 'MARKET',
-            quantity: existingPos.quantity,
-            price: event.entryReferencePrice,
-            leverage: existingPos.leverage,
-            status: 'FILLED'
-          }).select('id').single();
-
-          if (closeIntentData) {
-              // 2. Insert CLOSE active_order
-              await supabase.from('active_orders').insert({
-                intent_id: closeIntentData.id,
-                robot_id: event.robotId,
-                binance_order_id: `MOCK-BINANCE-${closeClientOrderId}`,
-                client_order_id: closeClientOrderId,
-                symbol: event.executionSymbol,
-                side: existingPos.side === 'LONG' ? 'SELL' : 'BUY',
-                order_type: 'MARKET',
-                quantity: existingPos.quantity,
-                price: event.entryReferencePrice,
-                filled_quantity: existingPos.quantity,
-                average_fill_price: event.entryReferencePrice,
-                status: 'FILLED',
-                role: 'TAKER',
-                  correlation_id: event.trace.correlationId
-              });
-          }
-
-          // 3. Move active_position to trade_history
           const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (event.entryReferencePrice - existingPos.entry_price) * existingPos.quantity;
           const ctx = existingPos.context_snapshot || {};
             const { error: histErr } = await supabase.from('trade_history').insert({
@@ -212,13 +133,8 @@ const markCompleted = async (cid: string) => {
             });
           if (histErr) console.error('[PaperExecutionEngine] REVERSAL trade_history insert failed:', histErr);
 
-          // 4. Delete active_position and close intent/order (Cleanup LIVE records)
+          // 4. Delete active_position (Cleanup LIVE records)
           await supabase.from('active_positions').delete().eq('id', existingPos.id);
-          
-          if (closeIntentData) {
-              await supabase.from('active_orders').delete().eq('intent_id', closeIntentData.id);
-              await supabase.from('execution_intents').delete().eq('id', closeIntentData.id);
-          }
 
           const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
           const closedEvent = EventFactory.createEvent('POSITION_CLOSED_EVENT', event.robotId, event.configVersion || 1, trace, {
@@ -231,61 +147,6 @@ const markCompleted = async (cid: string) => {
           await coreEventBus.publish(closedEvent as any);
           console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${event.trace.correlationId} position closed`);
         }
-      }
-
-      // 2. Insert OPEN execution_intents
-      const clientOrderId = `PAPER-${event.robotId.substring(0,8)}-${event.eventId.substring(0,8)}`;
-      const { data: intentData, error: intentErr } = await supabase
-        .from('execution_intents')
-        .insert({
-          robot_id: event.robotId,
-          signal_id: event.eventId,
-          client_order_id: clientOrderId,
-          action: action,
-          symbol: event.executionSymbol,
-          order_type: event.orderType || 'MARKET',
-          quantity: event.positionSize,
-          price: event.entryReferencePrice,
-          leverage: event.leverage,
-          status: 'FILLED'
-        })
-        .select('id')
-        .single();
-
-      if (intentErr) {
-        console.error('[PaperExecutionEngine] intentErr:', intentErr);
-        if (intentErr.code === '23505') return; // Duplicate
-        return;
-      }
-      const intentId = intentData.id;
-
-      // 3. Insert OPEN active_orders
-      const binanceOrderId = `MOCK-BINANCE-${clientOrderId}`;
-      const { data: orderData, error: orderErr } = await supabase
-        .from('active_orders')
-        .insert({
-          intent_id: intentId,
-          robot_id: event.robotId,
-          binance_order_id: binanceOrderId,
-          client_order_id: clientOrderId,
-          symbol: event.executionSymbol,
-          side: side,
-          order_type: event.orderType || 'MARKET',
-          quantity: event.positionSize,
-          price: event.entryReferencePrice,
-          filled_quantity: event.positionSize,
-          average_fill_price: event.entryReferencePrice,
-          status: 'FILLED',
-          role: 'TAKER',
-                  correlation_id: event.trace.correlationId
-        })
-        .select('id')
-        .single();
-
-      if (orderErr) {
-        console.error('[PaperExecutionEngine] orderErr:', orderErr);
-        await supabase.from('execution_intents').delete().eq('id', intentId);
-        return;
       }
 
       // 4. Insert active_positions
@@ -314,14 +175,8 @@ const markCompleted = async (cid: string) => {
 
       if (posErr) {
         console.error('[PaperExecutionEngine] posErr:', posErr);
-        await supabase.from('active_orders').delete().eq('id', orderData.id);
-        await supabase.from('execution_intents').delete().eq('id', intentId);
         return;
       }
-
-      // 5. Cleanup LIVE records (FILLED orders/intents are no longer LIVE)
-      await supabase.from('active_orders').delete().eq('id', orderData.id);
-      await supabase.from('execution_intents').delete().eq('id', intentId);
 
       // 6. Publish POSITION_OPENED_EVENT
       const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
@@ -367,40 +222,6 @@ const markCompleted = async (cid: string) => {
       console.log(`[PaperExecutionEngine] CLOSING position for robot ${robotId} at ${exitPrice}`);
       
       const closeAction = existingPos.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
-      const closeClientOrderId = `PAPER-CLS-${robotId.substring(0,8)}-${eventId.substring(0,8)}`;
-      
-      const { data: closeIntentData } = await supabase.from('execution_intents').insert({
-        robot_id: robotId,
-        signal_id: eventId,
-        client_order_id: closeClientOrderId,
-        action: closeAction,
-        symbol: existingPos.symbol,
-        order_type: 'MARKET',
-        quantity: existingPos.quantity,
-        price: exitPrice,
-        leverage: existingPos.leverage,
-        status: 'FILLED'
-      }).select('id').single();
-
-      if (closeIntentData) {
-          await supabase.from('active_orders').insert({
-            intent_id: closeIntentData.id,
-            robot_id: robotId,
-            binance_order_id: `MOCK-BINANCE-${closeClientOrderId}`,
-            client_order_id: closeClientOrderId,
-            symbol: existingPos.symbol,
-            side: existingPos.side === 'LONG' ? 'SELL' : 'BUY',
-            order_type: 'MARKET',
-            quantity: existingPos.quantity,
-            price: exitPrice,
-            filled_quantity: existingPos.quantity,
-            average_fill_price: exitPrice,
-            status: 'FILLED',
-            role: 'TAKER',
-            correlation_id: correlationId
-          });
-      }
-
       const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (exitPrice - existingPos.entry_price) * existingPos.quantity;
       await supabase.from('trade_history').insert({
           robot_id: robotId,
@@ -418,11 +239,6 @@ const markCompleted = async (cid: string) => {
       });
 
       await supabase.from('active_positions').delete().eq('id', existingPos.id);
-      
-      if (closeIntentData) {
-          await supabase.from('active_orders').delete().eq('intent_id', closeIntentData.id);
-          await supabase.from('execution_intents').delete().eq('id', closeIntentData.id);
-      }
 
       const trace = EventFactory.createTrace(correlationId, eventId, this.engineId, 999);
       const closedEvent = EventFactory.createEvent('POSITION_CLOSED_EVENT', robotId, 1, trace, {

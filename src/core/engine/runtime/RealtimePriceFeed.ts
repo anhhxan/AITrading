@@ -1,4 +1,3 @@
-
 import { BaseEvent, EventFactory } from '../../infrastructure/EventFactory';
 import { coreEventBus } from '@/core/infrastructure/EventBus';
 import { SequenceAuthority } from '../../infrastructure/SequenceAuthority';
@@ -11,7 +10,11 @@ export interface RealtimePriceEvent extends BaseEvent {
     sequenceId: number;
 }
 
-export type FeedStatus = 'CONNECTING' | 'CONNECTED' | 'STALE' | 'DISCONNECTED';
+export type FeedStatus = 'CONNECTING' | 'CONNECTED' | 'STALE' | 'RECONNECTING' | 'DISCONNECTED';
+
+const WATCHDOG_THRESHOLD_MS = 15000;
+const STALE_THRESHOLD_MS = 5000;
+const RECONNECT_DELAY_MS = 3000;
 
 export class RealtimePriceFeed {
     private ws: WebSocket | null = null;
@@ -36,26 +39,33 @@ export class RealtimePriceFeed {
     private heartbeatInterval: any = null;
 
     private clockSkew: number | null = null;
+    private reconnectCount: number = 0;
 
     public isDataValid(): boolean {
         return this.status === 'CONNECTED' &&
                this.lastPrice > 0 &&
                this.lastMarketTimestamp > 0 &&
-               (this.clockSkew !== null && (Date.now() - this.clockSkew) - this.lastMarketTimestamp <= 5000);
+               (this.clockSkew !== null && (Date.now() - this.clockSkew) - this.lastMarketTimestamp <= STALE_THRESHOLD_MS);
     }
 
     public start() {
         if (this.status === 'CONNECTED' || this.status === 'CONNECTING') return;
-        this.logForensic('REALTIME_PRICE_FEED_STARTED');
+        this.logForensic('REALTIME_FEED_STARTED');
         this.connect();
 
-        // Stale check
+        // Stale & Watchdog check
         this.staleCheckInterval = setInterval(() => {
-            if (this.status === 'CONNECTED' && this.clockSkew !== null) {
+            if (this.clockSkew !== null && this.lastMarketTimestamp > 0) {
                 const adjustedNow = Date.now() - this.clockSkew;
-                if (this.lastMarketTimestamp <= 0 || adjustedNow - this.lastMarketTimestamp > 5000) {
+                const age = adjustedNow - this.lastMarketTimestamp;
+                
+                if (age > WATCHDOG_THRESHOLD_MS) {
+                    if (this.status !== 'RECONNECTING') {
+                        this.reconnect('WATCHDOG_TIMEOUT');
+                    }
+                } else if (age > STALE_THRESHOLD_MS && this.status === 'CONNECTED') {
                     this.status = 'STALE';
-                    this.logForensic('REALTIME_PRICE_FEED_STALE');
+                    this.logForensic('REALTIME_FEED_STALE');
                 }
             }
         }, 1000);
@@ -108,7 +118,7 @@ export class RealtimePriceFeed {
 
         this.ws.onopen = () => {
             this.status = 'CONNECTING';
-            this.logForensic('REALTIME_PRICE_FEED_CONNECTING');
+            this.logForensic('REALTIME_FEED_CONNECTING');
 
             // Ping to keep alive
             this.pingInterval = setInterval(() => {
@@ -134,9 +144,9 @@ export class RealtimePriceFeed {
                         this.lastPrice = price;
                         this.lastMarketTimestamp = timestamp; // Event time
 
-                        if (this.status === 'STALE' || this.status === 'DISCONNECTED' || this.status === 'CONNECTING') {
+                        if (this.status === 'STALE' || this.status === 'DISCONNECTED' || this.status === 'CONNECTING' || this.status === 'RECONNECTING') {
                             this.status = 'CONNECTED';
-                            this.logForensic('REALTIME_PRICE_FEED_CONNECTED');
+                            this.logForensic('REALTIME_FEED_CONNECTED');
                         }
 
                         this.publishEvent();
@@ -144,18 +154,19 @@ export class RealtimePriceFeed {
                 }
             } catch (err) {
                 console.error(`[RealtimePriceFeed] JSON parse error:`, err);
-                this.logForensic('REALTIME_PRICE_PARSE_ERROR');
+                this.logForensic('REALTIME_PARSE_ERROR');
             }
         };
 
         this.ws.onclose = () => {
             if (this.pingInterval) clearInterval(this.pingInterval);
-            if (this.status !== 'DISCONNECTED') {
+            if (this.status !== 'DISCONNECTED' && this.status !== 'RECONNECTING') {
                 this.status = 'DISCONNECTED';
-                this.logForensic('REALTIME_PRICE_FEED_DISCONNECTED');
+                this.logForensic('REALTIME_FEED_DISCONNECTED');
             }
-            // Reconnect logic with basic backoff (fixed 3s for now as requested by stability)
-            this.reconnectTimeout = setTimeout(() => this.connect(), 3000);
+            if (this.status !== 'RECONNECTING') {
+                this.reconnectTimeout = setTimeout(() => this.reconnect('SOCKET_CLOSED'), RECONNECT_DELAY_MS);
+            }
         };
 
         this.ws.onerror = (err: any) => {
@@ -193,6 +204,36 @@ export class RealtimePriceFeed {
         await coreEventBus.publish(priceEvent as any);
     }
 
+    private reconnect(reason: string) {
+        if (this.status === 'RECONNECTING') return;
+        this.status = 'RECONNECTING';
+        this.reconnectCount++;
+        
+        const age = (this.clockSkew !== null && this.lastMarketTimestamp > 0) ? (Date.now() - this.clockSkew - this.lastMarketTimestamp) : 0;
+        this.logForensic('REALTIME_FEED_RECONNECT', { reason, previousAge: age, clockSkew: this.clockSkew, reconnectCount: this.reconnectCount });
+
+        if (this.ws) {
+            this.ws.onclose = null; // Prevent onclose from firing and triggering the 3s timeout again
+            this.ws.onerror = null;
+            this.ws.onmessage = null;
+            this.ws.onopen = null;
+            try { this.ws.close(); } catch(e) {}
+            this.ws = null;
+        }
+
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+
+        // Delay slightly to prevent tight loop
+        setTimeout(() => this.connect(), 100);
+    }
+
     public stop() {
         if (this.ws) {
             try { this.ws.close(); } catch(e) {}
@@ -205,12 +246,13 @@ export class RealtimePriceFeed {
         this.status = 'DISCONNECTED';
     }
 
-    private async logForensic(event: string) {
+    private async logForensic(event: string, extraPayload: any = {}) {
         console.log(JSON.stringify({
             event,
             robot_id: this.robotId,
             symbol: this.symbol,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            ...extraPayload
         }));
 
         const seq = SequenceAuthority.next(this.robotId);
@@ -222,18 +264,18 @@ export class RealtimePriceFeed {
         );
 
         const sysEvent = EventFactory.createEvent(
-            event, // eventType = REALTIME_PRICE_FEED_CONNECTED etc
+            event,
             this.robotId,
             1,
             trace,
             {
                 symbol: this.symbol,
                 status: this.status,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                ...extraPayload
             }
         );
 
         await coreEventBus.publish(sysEvent as any);
     }
 }
-

@@ -1,447 +1,413 @@
 import { createClient } from '@/lib/supabase/server'
-import { Bot, Play, Square, Archive, Activity, FileText, CheckCircle } from 'lucide-react'
+import { Bot, Play, Square, Archive, Activity, FileText, CheckCircle, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import RobotControlPanel from './RobotControlPanel'
 import TradeHistoryFilter from './TradeHistoryFilter'
 import TestSignalButton from './TestSignalButton'
-import SignalPipelineMonitor from './SignalPipelineMonitor'
-import { translateRobotState } from '@/lib/utils'
+import ResetButton from '../../paper-trading/ResetButton'
 
-export default async function RobotDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export const dynamic = 'force-dynamic'
+
+export default async function RobotDetailPage({ params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ tab?: string }> }) {
   const resolvedParams = await params;
+  const resolvedSearchParams = await searchParams;
+  const currentTab = resolvedSearchParams.tab || 'overview';
+  
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) return null
 
-  // Fetch Robot
-  const { data: robot } = await supabase
-    .from('robots')
-    .select('*, trading_accounts!fk_robots_trading_account(name)')
-    .eq('id', resolvedParams.id)
-    .single()
+  // 1. Fetch data in parallel using Promise.all to avoid waterfall
+  const [
+    { data: robot, error: robotError },
+    { data: positions, error: positionsError },
+    { data: signals, error: signalsError },
+    { data: trades, error: tradesError }
+  ] = await Promise.all([
+    supabase.from('robots').select('*').eq('id', resolvedParams.id).single(),
+    supabase.from('active_positions').select('*').eq('robot_id', resolvedParams.id),
+    supabase.from('robot_commands').select('*').eq('robot_id', resolvedParams.id).eq('command_type', 'TV_SIGNAL').order('created_at', { ascending: false }).limit(50),
+    supabase.from('trade_history').select('*').eq('robot_id', resolvedParams.id).order('created_at', { ascending: false }).limit(20)
+  ]);
 
-  if (!robot) {
-    return <div>Robot not found or access denied</div>
+  if (robotError || !robot) {
+    return <div className="p-8 text-center text-red-500 font-bold">Lỗi: Không tìm thấy Robot hoặc bạn không có quyền truy cập.</div>
   }
 
-  // Fetch Configs
-  const { data: configs } = await supabase
-    .from('robot_configs')
-    .select('*')
-    .eq('robot_id', resolvedParams.id)
-    .order('version', { ascending: false })
-
-  const { data: positions } = await supabase
-    .from('active_positions')
-    .select('*')
-    .eq('robot_id', resolvedParams.id);
-
-  const { data: activeOrders } = await supabase
-    .from('active_orders')
-    .select('*')
-    .eq('robot_id', resolvedParams.id)
-    .order('created_at', { ascending: false })
-    .limit(5);
-
-  const { data: intents } = await supabase
-    .from('execution_intents')
-    .select('*')
-    .eq('robot_id', resolvedParams.id)
-    .order('created_at', { ascending: false })
-    .limit(5);
-
-  const { data: trades } = await supabase
-    .from('trade_history')
-    .select('*')
-    .eq('robot_id', resolvedParams.id)
-    .order('created_at', { ascending: false })
-    .limit(5);
-
-  const getHeartbeatStatus = (lastHeartbeat: string | null) => {
-    if (!lastHeartbeat) {
-      return <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">Worker not connected</span>;
-    }
-    const heartbeatTime = new Date(lastHeartbeat).getTime();
-    const now = Date.now();
-    if (now - heartbeatTime < 60000) {
-      return <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded font-medium border border-emerald-100">ONLINE</span>;
-    }
-    return <span className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded font-medium border border-red-100">OFFLINE</span>;
+  // Active Position State
+  let positionState = 'FLAT';
+  let activePos = null;
+  if (positions && positions.length > 0) {
+    positionState = positions[0].side;
+    activePos = positions[0];
   }
+
+  const isRunning = robot.status === 'RUNNING';
+
+  const formatDate = (dateStr: string) => dateStr ? new Date(dateStr).toLocaleString() : '—';
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+      {/* HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div className="flex items-center gap-4">
-          <div className="h-12 w-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
-            <Bot size={24} />
+          <div className="h-14 w-14 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shrink-0 border border-indigo-100">
+            <Bot size={28} />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
               {robot.name}
-              {robot.status === 'RUNNING' && <span className="flex h-2 w-2 rounded-full bg-green-500"></span>}
             </h1>
-            <div className="text-sm text-slate-500 font-mono mt-0.5">{robot.slug}</div>
+            <div className="text-sm text-slate-500 font-medium flex items-center gap-2 mt-1">
+              <span className="font-mono">{robot.symbol || 'N/A'}</span>
+              <span>·</span>
+              <span>{robot.timeframe || 'N/A'}</span>
+              <span>·</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-blue-100 text-blue-700">{robot.trading_mode || 'PAPER'}</span>
+              <span>·</span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${isRunning ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-700'}`}>
+                {robot.status || 'UNKNOWN'}
+              </span>
+              <span>·</span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider border ${positionState === 'LONG' ? 'bg-green-50 border-green-200 text-green-700' : positionState === 'SHORT' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                STATE: {positionState}
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href={`/dashboard/robots/${resolvedParams.id}/pipeline`} className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 flex items-center gap-2">
-            <Activity size={16} /> Signal Pipeline Monitor
-          </Link>
-          {getHeartbeatStatus(robot.last_heartbeat_at)}
         </div>
       </div>
 
-      <div className="flex flex-col space-y-6">
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="font-semibold text-slate-800 flex items-center">
-                <Activity className="w-4 h-4 mr-2" />
-                Status Overview
-              </h3>
-            </div>
-            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Lifecycle Status</p>
-                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.status}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Engine State</p>
-                <p className="font-semibold text-indigo-600 min-w-0 break-words">{translateRobotState(robot.current_state)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Trading Mode</p>
-                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.trading_mode || 'PAPER'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Paper Balance</p>
-                <p className="font-semibold text-blue-600 min-w-0 break-words">${Number(robot.paper_balance || 10000).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Trading Status</p>
-                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.trading_enabled ? <span className="text-emerald-600">ON</span> : <span className="text-slate-500">PAUSED</span>}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">TradingView Symbol</p>
-                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.trading_view_symbol || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Execution Symbol</p>
-                <p className="font-semibold text-slate-900 min-w-0 break-words">{robot.execution_symbol || 'N/A'}</p>
-              </div>
-            </div>
-          </div>
+      {/* TABS NAVIGATION */}
+      <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg overflow-x-auto">
+        <Link href={`/dashboard/robots/${robot.id}?tab=overview`} className={`px-4 py-2 text-sm font-medium rounded-md whitespace-nowrap ${currentTab === 'overview' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}>
+          Overview
+        </Link>
+        <Link href={`/dashboard/robots/${robot.id}?tab=signals`} className={`px-4 py-2 text-sm font-medium rounded-md whitespace-nowrap ${currentTab === 'signals' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}>
+          Signals & Trades
+        </Link>
+        <Link href={`/dashboard/robots/${robot.id}?tab=diagnostics`} className={`px-4 py-2 text-sm font-medium rounded-md whitespace-nowrap ${currentTab === 'diagnostics' ? 'bg-white shadow text-slate-900' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'}`}>
+          Diagnostics
+        </Link>
+      </div>
 
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-            <h3 className="font-semibold text-slate-900 mb-4">Control Panel</h3>
-            <RobotControlPanel 
-              robotId={robot.id} 
-              currentStatus={robot.status} 
-              tradingEnabled={robot.trading_enabled}
-              action="CONTROLS" 
-            />
-            <div className="mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 space-y-2">
-              <p><strong>Commands:</strong> START/STOP send async commands to the worker.</p>
-              <p><strong>Archive:</strong> Disables the robot permanently via RPC.</p>
-              <p><strong>Trading:</strong> Edit database to set trading_enabled=true.</p>
-            </div>
-          </div>
-        
-          <TestSignalButton 
-            robotId={robot.id} 
-            status={robot.status} 
-            tradingMode={robot.trading_mode} 
-          />
-          
-          <SignalPipelineMonitor robotId={robot.id} />
-
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mt-6">
-            <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-800 flex items-center">
-                <FileText className="w-4 h-4 mr-2" />
-                Active Position
-              </h3>
-            </div>
-            <div className="p-4">
-              {!positions || positions.length === 0 ? (
-                <p className="text-sm text-slate-500">No active positions.</p>
-              ) : (
-                <div className="space-y-4">
-                  {positions.map((pos: any) => (
-                    <div key={pos.id} className="flex flex-col gap-4 bg-slate-50 p-4 rounded-lg border border-slate-100">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="text-xs text-slate-500">PAPER TRADING</div>
-                          <div className="font-bold text-slate-900 flex items-center gap-2 mt-1">
-                            {pos.symbol}
-                            <span className={`text-xs px-2 py-1 rounded ${pos.side === 'LONG' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{pos.side}</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs text-slate-500">Unrealized PnL</div>
-                          <div className={`font-semibold text-lg ${pos.unrealized_pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {pos.unrealized_pnl >= 0 ? '+' : ''}{pos.unrealized_pnl}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                        <div>
-                          <span className="block text-xs text-slate-500">Entry Price</span>
-                          <span className="font-medium">{pos.entry_price}</span>
-                        </div>
-                        <div>
-                          <span className="block text-xs text-slate-500">Current Price</span>
-                          <span className="font-medium text-slate-400">N/A (Current Candle Close)</span>
-                        </div>
-                        <div>
-                          <span className="block text-xs text-slate-500">Take Profit</span>
-                          <span className="font-medium text-green-600">{pos.take_profit_price || 'N/A'}</span>
-                        </div>
-                        <div>
-                          <span className="block text-xs text-slate-500">Stop Loss</span>
-                          <span className="font-medium text-red-600">{pos.stop_loss_price || 'N/A'}</span>
-                        </div>
-                        <div>
-                          <span className="block text-xs text-slate-500">Quantity</span>
-                          <span className="font-medium">{pos.quantity}</span>
-                        </div>
-                        <div>
-                          <span className="block text-xs text-slate-500">Leverage</span>
-                          <span className="font-medium">{pos.leverage}x</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <div className="flex items-center gap-3">
-                <h3 className="font-semibold text-slate-800 flex items-center">
-                  <FileText className="w-4 h-4 mr-2" />
-                  Robot Configuration (Strict)
+      {/* TAB CONTENT: OVERVIEW */}
+      {currentTab === 'overview' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 space-y-6">
+            {/* ACTIVE POSITION */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center">
+                  <Activity className="w-4 h-4 mr-2 text-indigo-500" />
+                  Active Position
                 </h3>
-                {configs?.[0]?.status && (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                    configs[0].status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' :
-                    configs[0].status === 'PENDING' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                  }`}>
-                    {configs[0].status}
-                  </span>
-                )}
               </div>
-              {configs?.[0]?.status === 'PENDING' && (
-                <RobotControlPanel
-                  robotId={robot.id}
-                  configId={configs[0].id}
-                  action="APPLY_CONFIG"
-                />
-              )}
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
-                <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">TradingView Symbol</div>
-                  <div className="font-mono font-bold text-slate-900 break-words" title={robot.trading_view_symbol}>{robot.trading_view_symbol}</div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">Execution Symbol</div>
-                  <div className="font-mono font-bold text-blue-600 break-words" title={robot.execution_symbol}>{robot.execution_symbol}</div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">Timeframe</div>
-                  <div className="font-mono font-bold text-slate-900 uppercase break-words">{robot.timeframe}</div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">Strategy</div>
-                  <div className="font-mono font-bold text-slate-900 break-words">{configs?.[0]?.strategy_profile?.type || 'N/A'}</div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-slate-500 font-semibold mb-1 uppercase tracking-wider break-words">Position Allocation</div>
-                  <div className="font-mono font-bold text-emerald-600 break-words">
-                    {configs?.[0]?.risk_profile?.position_allocation_percent 
-                      ? `${configs[0].risk_profile.position_allocation_percent}% of balance`
-                      : <span className="text-red-500 font-semibold">NOT CONFIGURED</span>}
+              <div className="p-6">
+                {!activePos ? (
+                  <div className="text-center py-8">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold bg-slate-100 text-slate-600 mb-2">FLAT</span>
+                    <p className="text-slate-500 text-sm">No Open Position</p>
                   </div>
-                </div>
-              </div>
-              <div className="mt-6 pt-6 border-t border-slate-100">
-                <div className="text-xs text-slate-500 font-semibold mb-4 uppercase tracking-wider">Bollinger Bands (BB_MB) Configuration</div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  <div>
-                    <div className="text-xs text-slate-500 mb-1">Length</div>
-                    <div className="font-mono font-bold text-slate-900">{configs?.[0]?.indicator_profile?.length || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-500 mb-1">Source</div>
-                    <div className="font-mono font-bold text-slate-900">{configs?.[0]?.indicator_profile?.source || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-500 mb-1">Multiplier 1</div>
-                    <div className="font-mono font-bold text-slate-900">{configs?.[0]?.indicator_profile?.mult || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-500 mb-1">Multiplier 2</div>
-                    <div className="font-mono font-bold text-slate-900">{configs?.[0]?.indicator_profile?.mult2 || 'N/A'}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* DIAGNOSTICS BLOCK */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mt-6">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="font-semibold text-slate-800 flex items-center">
-                <Activity className="w-4 h-4 mr-2" />
-                Signal Diagnostics
-              </h3>
-            </div>
-            <div className="p-6">
-              {!robot.notification_profile?.diagnostics ? (
-                <div className="text-slate-500 font-medium flex items-center justify-center p-4 bg-slate-50 rounded-lg border border-slate-100">
-                  NO WEBHOOK RECEIVED
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center p-4 rounded-lg border border-slate-200 bg-slate-50">
-                    <div>
-                      <div className="text-xs text-slate-500 font-semibold mb-1 uppercase">Signal Result</div>
-                      <div className={`font-bold ${robot.notification_profile.diagnostics.last_signal_result === 'SIGNAL DETECTED' ? 'text-emerald-600' : 'text-slate-600'}`}>
-                        {robot.notification_profile.diagnostics.last_signal_result}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs text-slate-500 font-semibold mb-1 uppercase">Reason</div>
-                      <div className="font-medium text-slate-900">{robot.notification_profile.diagnostics.last_signal_reason}</div>
-                    </div>
-                  </div>
-
+                ) : (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                     <div>
-                      <div className="text-xs text-slate-500 mb-1">Last Webhook At</div>
-                      <div className="font-mono text-sm font-medium">{new Date(robot.notification_profile.diagnostics.last_webhook_at).toLocaleString()}</div>
+                      <p className="text-xs text-slate-500 mb-1 font-semibold">Symbol</p>
+                      <p className="font-bold text-slate-900">{activePos.symbol}</p>
                     </div>
                     <div>
-                      <div className="text-xs text-slate-500 mb-1">Bar Timestamp</div>
-                      <div className="font-mono text-sm font-medium">{new Date(robot.notification_profile.diagnostics.last_bar_timestamp).toLocaleString()}</div>
+                      <p className="text-xs text-slate-500 mb-1 font-semibold">Side</p>
+                      <p className={`font-bold ${activePos.side === 'LONG' ? 'text-green-600' : 'text-red-600'}`}>{activePos.side}</p>
                     </div>
-                    {robot.notification_profile.diagnostics.logic_eval && (
-                      <div className="col-span-2 md:col-span-4 mt-4">
-                        <div className="text-xs text-slate-500 mb-2 uppercase font-semibold">Logic Evaluation</div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="p-4 bg-white rounded-lg border border-slate-200 shadow-sm">
-                             <div className="text-sm font-bold text-slate-800 mb-3 border-b pb-2">LONG</div>
-                             <div className="text-xs font-mono space-y-2">
-                                <div className="flex justify-between"><span>C1 (prev &gt;= B5):</span> <span className={robot.notification_profile.diagnostics.logic_eval.long_c1 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.long_c1).toUpperCase()}</span></div>
-                                <div className="flex justify-between"><span>C2 (prev &lt;= B4):</span> <span className={robot.notification_profile.diagnostics.logic_eval.long_c2 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.long_c2).toUpperCase()}</span></div>
-                                <div className="flex justify-between"><span>C3 (curr &gt; B4):</span> <span className={robot.notification_profile.diagnostics.logic_eval.long_c3 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.long_c3).toUpperCase()}</span></div>
-                                <div className="flex justify-between mt-3 pt-2 border-t border-slate-100 font-bold text-sm"><span>FINAL:</span> <span className={robot.notification_profile.diagnostics.logic_eval.long_final ? 'text-emerald-600' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.long_final).toUpperCase()}</span></div>
-                             </div>
-                          </div>
-                          <div className="p-4 bg-white rounded-lg border border-slate-200 shadow-sm">
-                             <div className="text-sm font-bold text-slate-800 mb-3 border-b pb-2">SHORT</div>
-                             <div className="text-xs font-mono space-y-2">
-                                <div className="flex justify-between"><span>C1 (prev &gt;= B2):</span> <span className={robot.notification_profile.diagnostics.logic_eval.short_c1 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.short_c1).toUpperCase()}</span></div>
-                                <div className="flex justify-between"><span>C2 (prev &lt;= B1):</span> <span className={robot.notification_profile.diagnostics.logic_eval.short_c2 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.short_c2).toUpperCase()}</span></div>
-                                <div className="flex justify-between"><span>C3 (curr &lt; B2):</span> <span className={robot.notification_profile.diagnostics.logic_eval.short_c3 ? 'text-emerald-600 font-bold' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.short_c3).toUpperCase()}</span></div>
-                                <div className="flex justify-between mt-3 pt-2 border-t border-slate-100 font-bold text-sm"><span>FINAL:</span> <span className={robot.notification_profile.diagnostics.logic_eval.short_final ? 'text-emerald-600' : 'text-red-500'}>{String(robot.notification_profile.diagnostics.logic_eval.short_final).toUpperCase()}</span></div>
-                             </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="text-xs text-slate-500 mb-3 font-semibold uppercase">Previous Snapshot</div>
-                      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">Close</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.close ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B1 (Upper)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b1 ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B2 (Upper2)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b2 ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B3 (Basis)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b3 ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B4 (Lower2)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b4 ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B5 (Lower)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.prev_snapshot?.b5 ?? 'N/A'}</div></div>
-                      </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 font-semibold">Quantity</p>
+                      <p className="font-bold text-slate-900">{activePos.quantity}</p>
                     </div>
-
-                    <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 border-l-4 border-l-blue-500">
-                      <div className="text-xs text-blue-600 mb-3 font-semibold uppercase">Current Snapshot</div>
-                      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">Close</div><div className="font-mono text-xs font-bold text-slate-900">{robot.notification_profile.diagnostics.curr_snapshot?.close ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B1 (Upper)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b1 ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B2 (Upper2)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b2 ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B3 (Basis)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b3 ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B4 (Lower2)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b4 ?? 'N/A'}</div></div>
-                        <div><div className="text-[10px] text-slate-500 font-medium mb-1">B5 (Lower)</div><div className="font-mono text-xs">{robot.notification_profile.diagnostics.curr_snapshot?.b5 ?? 'N/A'}</div></div>
-                      </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 font-semibold">Entry Price</p>
+                      <p className="font-mono text-slate-900">{activePos.entry_price || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 font-semibold">Stop Loss</p>
+                      <p className="font-mono text-slate-600">{activePos.stop_loss_price || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 font-semibold">Take Profit</p>
+                      <p className="font-mono text-slate-600">{activePos.take_profit_price || '—'}</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="text-xs text-slate-500 mb-1 font-semibold">Open Time</p>
+                      <p className="text-sm text-slate-700">{formatDate(activePos.created_at)}</p>
                     </div>
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* READ-ONLY CONFIGURATION */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Robot Configuration (Read-only)</h3>
+              </div>
+              <div className="p-6 grid grid-cols-2 gap-6">
+                <div>
+                  <p className="text-xs text-slate-500 mb-1 font-semibold">TradingView Symbol</p>
+                  <p className="font-medium text-slate-900">{robot.trading_view_symbol || '—'}</p>
                 </div>
-              )}
-            </div>
-          </div>
-          {/* END DIAGNOSTICS BLOCK */}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100">
-                <h3 className="font-semibold text-slate-800 text-sm">Recent Intents</h3>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {!intents || intents.length === 0 ? (
-                  <div className="p-4 text-sm text-slate-500">No intents generated.</div>
-                ) : (
-                  intents.map((intent: any) => (
-                    <div key={intent.id} className="p-4 text-sm flex justify-between">
-                      <div>
-                        <div className="font-medium">{intent.action} {intent.symbol}</div>
-                        <div className="text-xs text-slate-400 break-words w-32">{intent.client_order_id}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs font-semibold">{intent.status}</div>
-                        <div className="text-xs text-slate-400">{new Date(intent.created_at).toLocaleTimeString()}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100">
-                <h3 className="font-semibold text-slate-800 text-sm">Active Orders</h3>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {!activeOrders || activeOrders.length === 0 ? (
-                  <div className="p-4 text-sm text-slate-500">No active orders.</div>
-                ) : (
-                  activeOrders.map((order: any) => (
-                    <div key={order.id} className="p-4 text-sm flex justify-between">
-                      <div>
-                        <div className="font-medium">{order.side} {order.quantity}</div>
-                        <div className="text-xs text-slate-400">{order.status}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs font-semibold">{order.average_fill_price || order.price || 'MKT'}</div>
-                        <div className="text-xs text-slate-400">{new Date(order.created_at).toLocaleTimeString()}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
+                <div>
+                  <p className="text-xs text-slate-500 mb-1 font-semibold">Execution Symbol</p>
+                  <p className="font-medium text-slate-900">{robot.execution_symbol || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 mb-1 font-semibold">Timeframe</p>
+                  <p className="font-medium text-slate-900">{robot.timeframe || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 mb-1 font-semibold">Starting Paper Balance</p>
+                  <p className="font-medium text-slate-900">{robot.paper_balance ? `${robot.paper_balance} USDT` : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 mb-1 font-semibold">Max Allocation %</p>
+                  <p className="font-medium text-slate-900">{robot.max_allocation_percent ? `${robot.max_allocation_percent}%` : '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 mb-1 font-semibold">Max Active Positions</p>
+                  <p className="font-medium text-slate-900">{robot.max_active_positions || '1'}</p>
+                </div>
               </div>
             </div>
           </div>
+
+          <div className="space-y-6">
+            {/* CONTROL PANEL */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider flex items-center">
+                  Lifecycle Controls
+                </h3>
+              </div>
+              <div className="p-6">
+                <RobotControlPanel 
+                  robotId={robot.id} 
+                  currentStatus={robot.status} 
+                  tradingEnabled={robot.trading_enabled} // keep for backend compatibility if required
+                  action="CONTROLS" 
+                />
+                <p className="text-xs text-slate-500 mt-4 leading-relaxed">
+                  Start or stop the robot. When RUNNING, the Paper Execution Engine will accept signals from TradingView.
+                </p>
+              </div>
+            </div>
+
+            {/* DANGER ZONE */}
+            <div className="bg-white border border-red-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-red-100 bg-red-50">
+                <h3 className="font-bold text-red-800 text-sm uppercase tracking-wider flex items-center">
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Danger Zone
+                </h3>
+              </div>
+              <div className="p-6 space-y-6">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800 mb-1">Reset Paper Account</p>
+                  <p className="text-xs text-slate-500 mb-3">Clear all positions, trades, and reset balance.</p>
+                  <ResetButton robotId={robot.id} disabled={isRunning} />
+                </div>
+                {/* Archive logic is also handled in list view, but can be added here if needed. 
+                    For now ResetButton is sufficient for Danger Zone as per requirements. */}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: SIGNALS & TRADES */}
+      {currentTab === 'signals' && (
+        <div className="space-y-6">
           
-          <TradeHistoryFilter robotId={resolvedParams.id} initialTrades={trades || []} />
-      </div>
+          {/* RECENT SIGNALS */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Recent TradingView Signals</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left whitespace-nowrap">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-6 py-3 font-medium">Time</th>
+                    <th className="px-6 py-3 font-medium">Action</th>
+                    <th className="px-6 py-3 font-medium text-right">Entry Price</th>
+                    <th className="px-6 py-3 font-medium text-right">SL / TP</th>
+                    <th className="px-6 py-3 font-medium">Command Status</th>
+                    <th className="px-6 py-3 font-medium">Business Result</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {!signals || signals.length === 0 ? (
+                    <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500">No TradingView Signal</td></tr>
+                  ) : (
+                    signals.map((sig: any) => {
+                      let payload = {} as any
+                      let result = {} as any
+                      try { if (sig.payload) payload = typeof sig.payload === 'string' ? JSON.parse(sig.payload) : sig.payload } catch(e) {}
+                      try { if (sig.result) result = typeof sig.result === 'string' ? JSON.parse(sig.result) : sig.result } catch(e) {}
+                      
+                      const action = payload?.action || payload?.side || '—'
+                      const entryPrice = payload?.entry_price || '—'
+                      const sl = payload?.stop_loss_price || '—'
+                      const tp = payload?.take_profit_price || '—'
+                      
+                      const getStatusColor = (status: string) => {
+                          if (status === 'COMPLETED' || status === 'ACCEPTED') return 'bg-green-100 text-green-700'
+                          if (status === 'FAILED' || status === 'REJECTED') return 'bg-red-100 text-red-700'
+                          if (status === 'IGNORED' || status === 'TIMEOUT') return 'bg-orange-100 text-orange-700'
+                          return 'bg-slate-100 text-slate-700'
+                      }
+
+                      const getActionColor = (a: string) => {
+                          if (a.includes('LONG')) return 'text-green-600 font-bold'
+                          if (a.includes('SHORT')) return 'text-red-600 font-bold'
+                          return 'text-slate-700 font-medium'
+                      }
+
+                      let execResultStr = '—'
+                      if (result && typeof result === 'object' && result.status) {
+                         execResultStr = result.status
+                         if (result.reason) execResultStr += `: ${result.reason}`
+                      } else if (typeof result === 'string') {
+                         execResultStr = result
+                      }
+
+                      return (
+                        <tr key={sig.id} className="hover:bg-slate-50">
+                          <td className="px-6 py-3 text-slate-500">{formatDate(sig.created_at)}</td>
+                          <td className={`px-6 py-3 ${getActionColor(action)}`}>{action}</td>
+                          <td className="px-6 py-3 text-right font-mono">{entryPrice}</td>
+                          <td className="px-6 py-3 text-right font-mono text-slate-500 text-xs">{sl} / {tp}</td>
+                          <td className="px-6 py-3">
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${getStatusColor(sig.status)}`}>
+                              {sig.status || 'UNKNOWN'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-3 font-medium text-xs text-slate-600 max-w-xs truncate" title={execResultStr}>
+                            {execResultStr}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* TRADE HISTORY */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Closed Trades (Realized PnL)</h3>
+              <Link href="/dashboard/trades" className="text-xs text-indigo-600 font-semibold hover:underline">View All</Link>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left whitespace-nowrap">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="px-6 py-3 font-medium">Open Time</th>
+                    <th className="px-6 py-3 font-medium">Close Time</th>
+                    <th className="px-6 py-3 font-medium">Side</th>
+                    <th className="px-6 py-3 font-medium text-right">Entry</th>
+                    <th className="px-6 py-3 font-medium text-right">Exit</th>
+                    <th className="px-6 py-3 font-medium text-right">Qty</th>
+                    <th className="px-6 py-3 font-medium text-right">Realized PnL</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {!trades || trades.length === 0 ? (
+                    <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500">No Closed Trades</td></tr>
+                  ) : (
+                    trades.map((trade: any) => {
+                      const netPnl = (trade.pnl || 0) - (trade.fee || 0);
+                      return (
+                        <tr key={trade.id} className="hover:bg-slate-50">
+                          <td className="px-6 py-3 text-slate-500 text-xs">{formatDate(trade.created_at)}</td>
+                          <td className="px-6 py-3 text-slate-500 text-xs">{formatDate(trade.closed_at)}</td>
+                          <td className="px-6 py-3">
+                            <span className={`font-bold ${trade.side === 'LONG' ? 'text-green-600' : 'text-red-600'}`}>{trade.side}</span>
+                          </td>
+                          <td className="px-6 py-3 text-right font-mono">{trade.entry_price}</td>
+                          <td className="px-6 py-3 text-right font-mono">{trade.exit_price}</td>
+                          <td className="px-6 py-3 text-right font-mono">{trade.quantity}</td>
+                          <td className="px-6 py-3 text-right">
+                            <span className={`font-bold ${netPnl > 0 ? 'text-green-600' : netPnl < 0 ? 'text-red-600' : 'text-slate-600'}`}>
+                              {netPnl > 0 ? '+' : ''}{netPnl.toFixed(2)} USDT
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* TAB CONTENT: DIAGNOSTICS */}
+      {currentTab === 'diagnostics' && (
+        <div className="space-y-6">
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden p-6">
+            <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider mb-2 flex items-center">
+               <AlertTriangle className="w-4 h-4 mr-2 text-amber-500" />
+               Internal Diagnostic Tools
+            </h3>
+            <p className="text-sm text-slate-500 mb-6">These tools are for developers and auditors to verify signal integrity.</p>
+            
+            <div className="flex flex-wrap gap-4">
+               <TestSignalButton robotId={robot.id} status={robot.status} tradingMode={robot.trading_mode} />
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Signal Processing Trace</h3>
+             </div>
+             <div className="p-6">
+                {!signals || signals.length === 0 ? (
+                  <p className="text-sm text-slate-500">No diagnostic events available.</p>
+                ) : (
+                  <div className="space-y-6">
+                    {signals.slice(0, 5).map((sig: any) => {
+                      let payloadStr = 'Malformed JSON';
+                      let resultStr = '—';
+                      try { payloadStr = typeof sig.payload === 'string' ? JSON.stringify(JSON.parse(sig.payload), null, 2) : JSON.stringify(sig.payload, null, 2) } catch(e) {}
+                      try { resultStr = typeof sig.result === 'string' ? JSON.stringify(JSON.parse(sig.result), null, 2) : JSON.stringify(sig.result, null, 2) } catch(e) {}
+
+                      return (
+                        <div key={sig.id} className="border border-slate-200 rounded-lg p-4 bg-slate-50 text-sm">
+                           <div className="flex justify-between items-center mb-3">
+                             <div className="font-semibold text-slate-800">Command ID: {sig.id}</div>
+                             <div className="text-xs text-slate-500">{formatDate(sig.created_at)}</div>
+                           </div>
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <div className="text-xs font-semibold text-slate-500 mb-1">Payload (Inbound)</div>
+                                <pre className="text-[10px] font-mono bg-slate-900 text-slate-300 p-3 rounded overflow-x-auto max-h-48">{payloadStr}</pre>
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-slate-500 mb-1">Result (Execution)</div>
+                                <pre className="text-[10px] font-mono bg-slate-100 text-slate-700 p-3 rounded overflow-x-auto max-h-48">{resultStr}</pre>
+                              </div>
+                           </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+             </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-

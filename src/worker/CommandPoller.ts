@@ -158,7 +158,10 @@ export class CommandPoller {
                     }
                 }
                 
-                await this.completeCommand(cmd.command_id, 'SUCCEEDED', payload);
+                await this.completeCommand(cmd.command_id, 'SUCCEEDED', {
+                    ...pipelineResult,
+                    payload: payload
+                });
             }
             else {
                 await this.completeCommand(cmd.command_id, 'FAILED', { error: 'Unknown command_type' });
