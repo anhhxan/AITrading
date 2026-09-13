@@ -64,28 +64,19 @@ const markCompleted = async (cid: string) => {
 
       if ((event as any).action === 'CLOSE') {
           console.log(`[PaperExecutionEngine] STOP/CLOSE DETECTED for robot ${event.robotId}`);
-          const { data: existingPos } = await supabase.from('active_positions').select('*').eq('robot_id', event.robotId).limit(1).maybeSingle();
-          if (existingPos) {
-              const closeAction = existingPos.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
-              const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (event.entryReferencePrice - existingPos.entry_price) * existingPos.quantity;
-              const ctx = existingPos.context_snapshot || {};
-              const { error: thErr } = await supabase.from('trade_history').insert({
-                  robot_id: event.robotId,
-                  side: existingPos.side,
-                  size: existingPos.quantity,
-                  entry_price: existingPos.entry_price,
-                  exit_price: event.entryReferencePrice,
-                  realized_pnl: pnl,
-                  fee: 0,
-                  slippage: 0,
-                  duration_seconds: 0,
-                  close_reason: (event as any).closeReason || 'STOP_LOSS',
-                  symbol: existingPos.symbol,
-                  correlation_id: event.trace.correlationId
-              });
-              if (thErr) console.error('[PaperExecutionEngine] STOP/CLOSE trade_history insert failed:', thErr);
-
-              await supabase.from('active_positions').delete().eq('id', existingPos.id);
+          const consoleReason = (event as any).closeReason || 'STOP_LOSS';
+          const { data: rpcData, error: rpcErr } = await supabase.rpc('atomic_paper_close', {
+              p_robot_id: event.robotId,
+              p_exit_price: event.entryReferencePrice,
+              p_close_reason: consoleReason,
+              p_correlation_id: event.trace.correlationId
+          });
+          
+          if (rpcErr) {
+              console.error('[PaperExecutionEngine] STOP/CLOSE RPC failed:', rpcErr);
+          } else if (!rpcData || !rpcData.success) {
+              console.warn(`[PaperExecutionEngine] STOP/CLOSE RPC returned false: ${rpcData?.error}`);
+          } else {
               console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${event.trace.correlationId} position closed`);
           }
           return;
@@ -114,27 +105,20 @@ const markCompleted = async (cid: string) => {
         } else {
           console.log(`[PaperExecutionEngine] REVERSAL DETECTED for robot ${event.robotId}. Closing existing position.`);
           
-          const closeAction = existingPos.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
-          const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (event.entryReferencePrice - existingPos.entry_price) * existingPos.quantity;
-          const ctx = existingPos.context_snapshot || {};
-            const { error: histErr } = await supabase.from('trade_history').insert({
-                robot_id: event.robotId,
-                side: existingPos.side,
-                size: existingPos.quantity,
-                entry_price: existingPos.entry_price,
-                exit_price: event.entryReferencePrice,
-                realized_pnl: pnl,
-                fee: 0,
-                slippage: 0,
-                duration_seconds: 0,
-                close_reason: 'REVERSAL',
-                symbol: existingPos.symbol,
-                correlation_id: event.trace.correlationId
-            });
-          if (histErr) console.error('[PaperExecutionEngine] REVERSAL trade_history insert failed:', histErr);
+          const { data: rpcData, error: rpcErr } = await supabase.rpc('atomic_paper_close', {
+              p_robot_id: event.robotId,
+              p_exit_price: event.entryReferencePrice,
+              p_close_reason: 'REVERSAL',
+              p_correlation_id: event.trace.correlationId
+          });
 
-          // 4. Delete active_position (Cleanup LIVE records)
-          await supabase.from('active_positions').delete().eq('id', existingPos.id);
+          if (rpcErr) {
+              console.error('[PaperExecutionEngine] REVERSAL RPC failed:', rpcErr);
+          } else if (!rpcData || !rpcData.success) {
+              console.warn(`[PaperExecutionEngine] REVERSAL RPC returned false: ${rpcData?.error}`);
+          }
+          
+          const realizedPnl = rpcData?.realized_pnl || 0;
 
           const trace = EventFactory.createTrace(event.trace.correlationId, event.eventId, this.engineId, event.trace.sequence);
           const closedEvent = EventFactory.createEvent('POSITION_CLOSED_EVENT', event.robotId, event.configVersion || 1, trace, {
@@ -142,7 +126,7 @@ const markCompleted = async (cid: string) => {
             side: existingPos.side,
             quantity: existingPos.quantity,
             exitPrice: event.entryReferencePrice,
-            realizedPnl: pnl
+            realizedPnl: realizedPnl
           });
           await coreEventBus.publish(closedEvent as any);
           console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${event.trace.correlationId} position closed`);
@@ -221,24 +205,21 @@ const markCompleted = async (cid: string) => {
       
       console.log(`[PaperExecutionEngine] CLOSING position for robot ${robotId} at ${exitPrice}`);
       
-      const closeAction = existingPos.side === 'LONG' ? 'CLOSE_LONG' : 'CLOSE_SHORT';
-      const pnl = (existingPos.side === 'LONG' ? 1 : -1) * (exitPrice - existingPos.entry_price) * existingPos.quantity;
-      await supabase.from('trade_history').insert({
-          robot_id: robotId,
-          side: existingPos.side,
-          size: existingPos.quantity,
-          entry_price: existingPos.entry_price,
-          exit_price: exitPrice,
-          realized_pnl: pnl,
-          fee: 0,
-          slippage: 0,
-          duration_seconds: 0,
-          close_reason: closeReason,
-          symbol: existingPos.symbol,
-          correlation_id: correlationId
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('atomic_paper_close', {
+          p_robot_id: robotId,
+          p_exit_price: exitPrice,
+          p_close_reason: closeReason,
+          p_correlation_id: correlationId
       });
 
-      await supabase.from('active_positions').delete().eq('id', existingPos.id);
+      if (rpcErr) {
+          console.error('[PaperExecutionEngine] closePosition RPC failed:', rpcErr);
+          throw new Error(`RPC Failed: ${rpcErr.message}`);
+      } else if (!rpcData || !rpcData.success) {
+          console.warn(`[PaperExecutionEngine] closePosition RPC returned false: ${rpcData?.error}`);
+      }
+      
+      const realizedPnl = rpcData?.realized_pnl || 0;
 
       const trace = EventFactory.createTrace(correlationId, eventId, this.engineId, 999);
       const closedEvent = EventFactory.createEvent('POSITION_CLOSED_EVENT', robotId, 1, trace, {
@@ -246,7 +227,7 @@ const markCompleted = async (cid: string) => {
         side: existingPos.side,
         quantity: existingPos.quantity,
         exitPrice: exitPrice,
-        realizedPnl: pnl
+        realizedPnl: realizedPnl
       });
       await coreEventBus.publish(closedEvent as any);
       console.log(`[PAPER] EXECUTION_SUCCESS TEST_ID=${correlationId} position closed`);

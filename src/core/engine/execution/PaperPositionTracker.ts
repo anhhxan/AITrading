@@ -90,38 +90,20 @@ export class PaperPositionTracker implements IEngine {
 
     if (!robot || robot.trading_mode !== 'PAPER') return;
 
-    let realizedPnl = 0;
-    if (position.side === 'LONG') {
-      realizedPnl = (exitPrice - position.entry_price) * position.quantity;
-    } else if (position.side === 'SHORT') {
-      realizedPnl = (position.entry_price - exitPrice) * position.quantity;
-    }
-    const newBalance = Number(robot.paper_balance) + realizedPnl;
-
-    await supabase.from('active_positions').delete().eq('robot_id', robotId);
-
-    const ctx = this.positionContexts.get(robotId) || {
-       executionSymbol: position.symbol || 'unknown_legacy',
-       tradingViewSymbol: 'unknown_legacy',
-       timeframe: 'unknown',
-       strategyId: 'unknown_legacy',
-       indicatorSnapshot: {}
-    };
-
-    await supabase.from('paper_positions_history').insert({
-      robot_id: robotId,
-      symbol: position.symbol,
-      side: position.side,
-      quantity: position.quantity,
-      entry_price: position.entry_price,
-      exit_price: exitPrice,
-      realized_pnl: realizedPnl,
-      closed_at: new Date().toISOString(),
-      close_reason: event.payload?.reason || 'FORCE_CLOSE',
-      context_snapshot: ctx
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('atomic_paper_close', {
+        p_robot_id: robotId,
+        p_exit_price: exitPrice,
+        p_close_reason: event.payload?.reason || 'FORCE_CLOSE',
+        p_correlation_id: event.trace?.correlationId || 'force-close-' + Date.now()
     });
 
-    await supabase.from('robots').update({ paper_balance: newBalance }).eq('id', robotId);
+    if (rpcErr) throw new Error(`[PaperPositionTracker] FORCE_CLOSE RPC failed: ${rpcErr.message}`);
+    if (!rpcData || !rpcData.success) {
+        console.warn(`[PaperPositionTracker] FORCE_CLOSE RPC returned false: ${rpcData?.error}`);
+        return;
+    }
+
+    const realizedPnl = rpcData.realized_pnl;
 
     const trace = EventFactory.createTrace(event.trace?.correlationId || 'force-close-'+Date.now(), event.eventId || 'fc-id', this.engineId, Date.now());
     const closedEvent = EventFactory.createEvent(
@@ -181,49 +163,20 @@ export class PaperPositionTracker implements IEngine {
       if (robotErr || !robot) return;
       if (robot.trading_mode !== 'PAPER') return;
 
-      // Compute P&L
-      let realizedPnl = 0;
-      if (position.side === 'LONG') {
-        realizedPnl = (exitPrice - entryPrice) * quantity;
-      } else if (position.side === 'SHORT') {
-        realizedPnl = (entryPrice - exitPrice) * quantity;
-      }
-      
-      const newBalance = Number(robot.paper_balance) + realizedPnl;
-
-      // Delete active_position
-      await supabase.from('active_positions').delete().eq('robot_id', robotId);
-
-      // Restore snapshot context securely
-      const ctx = this.positionContexts.get(robotId) || {
-         executionSymbol: position.symbol || 'unknown_legacy',
-         tradingViewSymbol: 'unknown_legacy',
-         timeframe: 'unknown',
-         strategyId: 'unknown_legacy',
-         indicatorSnapshot: {}
-      };
-
-      // Insert trade_history
-      await supabase.from('trade_history').insert({
-          robot_id: robotId,
-          action: position.side === 'LONG' ? 'SELL' : 'BUY',
-          side: position.side,
-          entry_price: entryPrice,
-          exit_price: exitPrice,
-          amount: quantity,
-          pnl: realizedPnl,
-          fee: 0,
-          slippage: 0,
-          reason: closeReason,
-          execution_symbol: ctx.executionSymbol,
-          trading_view_symbol: ctx.tradingViewSymbol,
-          timeframe: ctx.timeframe,
-          strategy_id: ctx.strategyId,
-          indicator_snapshot: ctx.indicatorSnapshot
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('atomic_paper_close', {
+          p_robot_id: robotId,
+          p_exit_price: exitPrice,
+          p_close_reason: closeReason,
+          p_correlation_id: event.trace?.correlationId || 'sl-tp-' + Date.now()
       });
 
-      // Update paper_balance
-      await supabase.from('robots').update({ paper_balance: newBalance }).eq('id', robotId);
+      if (rpcErr) throw new Error(`[PaperPositionTracker] REALTIME RPC failed: ${rpcErr.message}`);
+      if (!rpcData || !rpcData.success) {
+          console.warn(`[PaperPositionTracker] REALTIME RPC returned false: ${rpcData?.error}`);
+          return;
+      }
+
+      const realizedPnl = rpcData.realized_pnl;
 
       // Publish POSITION_CLOSED_EVENT
       const trace = EventFactory.createTrace(event.trace?.correlationId || 'sl-tp-'+Date.now(), event.eventId || 'sl-tp-id', this.engineId, Date.now());
